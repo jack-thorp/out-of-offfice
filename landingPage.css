@@ -1,0 +1,41 @@
+body{
+    margin: 0px;
+}
+.TopBar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 0vh 5vw;
+    background: #f8f9fc;
+}
+.TopBar_Logo {
+    max-height: 80px;
+}
+.TopBar_Search {
+    display: flex;
+    align-items: center;
+    padding: 0.2vh 1vw;
+    border: 1px solid #ccd0d5;
+    border-radius: 999px;
+    background: #fff;
+    margin-top: 20px;
+}
+.TopBar_Search input {
+    border: none;
+    outline: none;
+    min-width: 240px;
+    font-size: 1rem;
+}
+.TopBar_Search button {
+    border: none;
+    background: #10C1FF;
+    color: #fff;
+    padding: 0.5rem 1.25rem;
+    border-radius: 999px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.TopBar_Search button:hover {
+    background: #0647cc;
+}

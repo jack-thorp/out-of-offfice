@@ -12,6 +12,11 @@ body{
 .TopBar_Logo {
     max-height: 80px;
 }
+.TopBar_Actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
 .TopBar_Search {
     display: flex;
     align-items: center;
@@ -37,5 +42,116 @@ body{
     cursor: pointer;
 }
 .TopBar_Search button:hover {
-    background: #0647cc;
+    background: #1a2d57;
+}
+.TopBar_NewEntry {
+    border: none;
+    background: #10C1FF;
+    color: #fff;
+    padding: 0.5rem 1.25rem;
+    border-radius: 999px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    margin-top: 3px;
+}
+.TopBar_NewEntry:hover {
+    background: #1a2d57;
+}
+body.modal-open {
+    overflow: hidden;
+}
+.NewEntryPopup[hidden] {
+    display: none;
+}
+.NewEntryPopup {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    z-index: 1000;
+}
+.Modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(35, 35, 35, 0.55);
+}
+.Modal__dialog {
+    position: relative;
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+    padding: 2rem;
+    max-width: 480px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    z-index: 1;
+}
+.Modal__title {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #0b0b0b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+.NewEntryTitle {
+    height: 72px;
+    width: auto;
+    object-fit: contain;
+}
+.Modal__close {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    border: none;
+    background: transparent;
+    font-size: 1.75rem;
+    line-height: 1;
+    cursor: pointer;
+    color: #6b7280;
+}
+.Modal__close:hover {
+    color: #111827;
+}
+.Modal__form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+.Modal__form label {
+    display: flex;
+    flex-direction: column;
+    font-weight: 600;
+    color: #1f2933;
+    gap: 0.35rem;
+}
+.Modal__form input,
+.Modal__form textarea {
+    border: 1px solid #ccd0d5;
+    border-radius: 8px;
+    padding: 0.6rem 0.75rem;
+    font-size: 1rem;
+    font-family: inherit;
+    resize: vertical;
+}
+.NewEntrySave {
+    align-self: flex-end;
+    border: none;
+    background: #10C1FF;
+    color: #fff;
+    padding: 0.6rem 1.5rem;
+    border-radius: 999px;
+    font-weight: 700;
+    cursor: pointer;
+}
+.NewEntrySave:hover {
+    background: #1a2d57;
 }

@@ -15,13 +15,56 @@
         <link rel="icon" type="image/x-icon" href="cdn/Wheelhouse.ico">
         <link rel="stylesheet" href="landingPage.css">
     </head>
-<body>
-    <section class="TopBar">
-        <img class="TopBar_Logo" src="cdn/Logo.gif" alt="Tech Wheelhouse logo">
-        <form class="TopBar_Search" role="search">
-            <input type="search" name="q" placeholder="Search..." aria-label="Search...">
-            <button type="submit">Search</button>
-        </form>
-    </section>
-</body>
+    <body>
+        <!-- Top Bar Section -->
+        <section class="TopBar">
+            <img class="TopBar_Logo" src="cdn/Logo.gif" alt="Tech Wheelhouse logo">
+            <div class="TopBar_Actions">
+                <button class="TopBar_NewEntry" type="button" data-action="open-modal">New Entry +</button>
+                <form class="TopBar_Search" role="search">
+                    <input type="search" name="q" placeholder="Search..." aria-label="Search...">
+                    <button type="submit">Search</button>
+                </form>
+            </div>
+        </section>
+        <!-- New Entry Modal -->
+        <section class="NewEntryPopup" id="new-entry-modal" hidden aria-hidden="true" role="dialog" aria-modal="true">
+            <div class="Modal__backdrop" data-modal-close></div>
+            <div class="Modal__dialog" role="document">
+                <button class="Modal__close" type="button" aria-label="Close dialog" data-modal-close>&times;</button>
+                <h2 class="Modal__title">
+                    <img class="NewEntryTitle" src="cdn/new entry logo.png" alt="New entry logo">
+                </h2>
+                <form class="Modal__form">
+                    <label>
+                        <span>Name</span>
+                        <input class="inputPlaceholderText" type="text" name="name" placeholder="Enter name">
+                    </label>
+                    <label>
+                        <span>Location</span>
+                        <input class="inputPlaceholderText" type="text" name="location" placeholder="Enter location">
+                    </label>
+                    <label>
+                        <span>Rating</span>
+                        <input class="inputPlaceholderText" type="text" name="rating" placeholder="Enter rating">
+                    </label>
+                    <label>
+                        <span>Vibe Category</span>
+                        <input class="inputPlaceholderText" type="text" name="vibeCategory" placeholder="Enter vibe category">
+                    </label>
+                    <label>
+                        <span>What Celeb Would I Want To Share This Experience With</span>
+                        <input class="inputPlaceholderText" type="text" name="celeb" placeholder="Enter celeb">
+                    </label>
+                    <label>
+                        <span>Comments</span>
+                        <textarea class="inputPlaceholderText" name="comments" placeholder="Share your thoughts" rows="4"></textarea>
+                    </label>
+                    <button class="NewEntrySave" type="submit">Save Entry!</button>
+                </form>
+            </div>
+        </section>
+
+        <script src="landingPage.js"></script>
+    </body>
 </html>

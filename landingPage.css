@@ -1,6 +1,19 @@
-body{
-    margin: 0px;
+html {
+    height: 100%;
 }
+
+html, body{
+    margin: 0px;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    height: 100%;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Top bar */
+
 .TopBar {
     display: flex;
     align-items: center;
@@ -20,17 +33,37 @@ body{
 .TopBar_Search {
     display: flex;
     align-items: center;
-    padding: 0.2vh 1vw;
+    gap: 0.75rem;
+    padding: 0.35rem 0.5rem 0.35rem 0.75rem;
     border: 1px solid #ccd0d5;
     border-radius: 999px;
     background: #fff;
-    margin-top: 20px;
+    margin-top: 0;
+}
+.TopBar_SearchField {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+        /* for suggestions dropdown */
+    position: relative;
+    min-width: 240px;
+    --search-preview-gap: 6px;
+    --search-preview-height: 0px;
 }
 .TopBar_Search input {
     border: none;
     outline: none;
-    min-width: 240px;
     font-size: 1rem;
+    padding: 0.35rem 0.4rem;
+    background: #ffffff;
+    border-radius: 8px;
+    width: 100%;
+}
+.TopBar_Search input::-webkit-search-cancel-button {
+    cursor: pointer;
+}
+.TopBar_Search input::-ms-clear {
+    cursor: pointer;
 }
 .TopBar_Search button {
     border: none;
@@ -44,6 +77,25 @@ body{
 .TopBar_Search button:hover {
     background: #1a2d57;
 }
+.SearchFormatted {
+    position: absolute;
+    top: calc(100% + var(--search-preview-gap));
+    left: 0;
+    right: 0;
+    pointer-events: none;
+    min-height: 0;
+    z-index: 1500;
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 0.2rem 0.4rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+.SearchFormatted[hidden] {
+    display: none !important;
+}
+.LocationAutocomplete {
+    position: relative;
+}
 .TopBar_NewEntry {
     border: none;
     background: #10C1FF;
@@ -54,11 +106,666 @@ body{
     cursor: pointer;
     white-space: nowrap;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
-    margin-top: 3px;
+    margin-top: 0;
 }
 .TopBar_NewEntry:hover {
     background: #1a2d57;
 }
+
+/* Main layout: */
+
+.MainLayout {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+}
+.LeftPanel {
+    flex: 0 0 40%;
+    max-width: 640px;
+    min-width: 320px;
+    padding: 2rem 3vw 2.5rem;
+    overflow: hidden;
+    background: linear-gradient(180deg, #fdf8ff 0%, #f4fbff 48%, #ffffff 100%);
+    border-right: 1px solid rgba(16, 193, 255, 0.12);
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+.RightPanel {
+    flex: 1;
+    position: relative;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+.ActivityHeader {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+.ActivityHeader__titles {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+.ActivityHeader__eyebrow {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    font-weight: 700;
+    color: #1a2d57;
+    margin: 0;
+}
+.ActivityHeader__title {
+    font-size: clamp(1.6rem, 2.6vw, 2.35rem);
+    font-weight: 800;
+    margin: 0;
+    color: #0f1226;
+}
+.ActivityFilters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.ActivityFilter {
+    border: 1px solid rgba(26, 45, 87, 0.15);
+    background: #fff;
+    color: #1a2d57;
+    border-radius: 999px;
+    padding: 0.45rem 1.2rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+.ActivityFilter:hover {
+    border-color: #10C1FF;
+    color: #0f1226;
+    box-shadow: 0 8px 20px rgba(16, 193, 255, 0.15);
+}
+.ActivityFilter.is-active {
+    background: linear-gradient(135deg, #10C1FF 0%, #5f80ff 100%);
+    color: #fff;
+    border-color: transparent;
+    box-shadow: 0 10px 25px rgba(16, 193, 255, 0.25);
+}
+.ActivityConsole {
+    --activity-view-index: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    flex: 1;
+    min-height: 0;
+}
+.ActivityConsole[data-view="summary"] {
+    --activity-view-index: 1;
+}
+.ActivityConsole__toggle {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    background: rgba(16, 193, 255, 0.12);
+    border-radius: 999px;
+    padding: 0.35rem;
+    box-shadow: inset 0 1px 3px rgba(15, 18, 38, 0.15);
+    isolation: isolate;
+    overflow: hidden;
+}
+.ActivityConsole__toggleIndicator {
+    position: absolute;
+    top: 0;
+    left: calc(var(--activity-view-index) * 50%);
+    width: 50%;
+    height: 100%;
+    border-radius: 999px;
+    background: #fff;
+    box-shadow: 0 10px 25px rgba(16, 193, 255, 0.35);
+    transition: left 0.4s ease;
+    z-index: 0;
+}
+.ActivityConsole__toggleButton {
+    border: none;
+    background: transparent;
+    font-weight: 700;
+    font-size: 0.95rem;
+    padding: 0.45rem 0.5rem;
+    border-radius: 999px;
+    cursor: pointer;
+    color: #1a2d57;
+    position: relative;
+    z-index: 1;
+    transition: color 0.2s ease;
+}
+.ActivityConsole__toggleButton.is-active {
+    color: #0f1226;
+}
+.ActivityConsole__toggleButton:focus-visible {
+    outline: 2px solid #10C1FF;
+    outline-offset: 2px;
+}
+.ActivityConsole__card {
+    position: relative;
+    perspective: 2000px;
+    height: 100%;
+    min-height: 26rem;
+}
+.ActivityConsole__stage {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transform-style: preserve-3d;
+    transition: transform 0.8s ease;
+}
+.ActivityConsole[data-view="summary"] .ActivityConsole__stage {
+    transform: rotateY(180deg);
+}
+.ActivityConsole__face {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+    display: flex;
+    flex-direction: column;
+    pointer-events: none;
+}
+.ActivityConsole__face--summary {
+    transform: rotateY(180deg);
+}
+.ActivityConsole[data-view="list"] .ActivityConsole__face--list,
+.ActivityConsole[data-view="summary"] .ActivityConsole__face--summary {
+    pointer-events: auto;
+}
+.ActivityListWrapper {
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 1.25rem;
+    padding: 1.25rem;
+    box-shadow: 0 25px 50px -12px rgba(15, 18, 38, 0.15);
+    border: 1px solid rgba(26, 45, 87, 0.08);
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+.ActivityListFilters {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    margin: 0.35rem 0 0.85rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(26, 45, 87, 0.08);
+    flex-shrink: 0;
+}
+.ActivityListFilters .ActivityFilters {
+    justify-content: flex-start;
+}
+.ActivityList {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 0.25rem;
+    scrollbar-gutter: stable both-edges;
+}
+.ActivityEmptyState {
+    background: rgba(16, 193, 255, 0.08);
+    border: 1px dashed rgba(16, 193, 255, 0.4);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    text-align: center;
+    color: #1a2d57;
+    font-weight: 600;
+    line-height: 1.4;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.ActivityCard {
+    perspective: 1200px;
+}
+.ActivityCard__button {
+    border: none;
+    outline: none;
+    background: transparent;
+    width: 100%;
+    text-align: left;
+    padding: 0;
+    cursor: pointer;
+    display: block;
+}
+.ActivityCard__flip {
+    position: relative;
+    border-radius: 1rem;
+    background: linear-gradient(145deg, #ffffff, #f3f7ff);
+    border: 1px solid rgba(26, 45, 87, 0.07);
+    box-shadow: 0 16px 30px -20px rgba(15, 18, 38, 0.35);
+    transition: transform 0.6s ease, box-shadow 0.3s ease;
+    transform-style: preserve-3d;
+    min-height: 110px;
+}
+.ActivityCard.is-active .ActivityCard__flip {
+    box-shadow: 0 18px 44px -24px rgba(16, 193, 255, 0.6);
+    border-color: rgba(16, 193, 255, 0.4);
+}
+.ActivityCard__face {
+    position: absolute;
+    inset: 0;
+    padding: 0.65rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 0.25rem;
+    backface-visibility: hidden;
+    border-radius: inherit;
+    background: transparent;
+}
+.ActivityCard__face--back {
+    transform: rotateY(180deg);
+    background: linear-gradient(145deg, #eef6ff, #ffffff);
+}
+.ActivityCard__place {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #0f1226;
+}
+.ActivityCard__meta {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.65rem;
+    font-size: 0.88rem;
+    color: #4c5672;
+}
+.ActivityCard__person {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-weight: 600;
+}
+.ActivityCard__rating {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #ff8f1f;
+}
+.ActivityCard__rating::before {
+    content: '\2605';
+    font-size: 0.9rem;
+}
+.ActivityCard__date {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #95a0c2;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.ActivityCard__vibe {
+    align-self: flex-start;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 700;
+    background: rgba(16, 193, 255, 0.1);
+    color: #1a2d57;
+    border-radius: 999px;
+    padding: 0.15rem 0.45rem;
+}
+.ActivityCard__backLabel {
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #5f6b89;
+}
+.ActivityCard__comment {
+    font-size: 0.9rem;
+    color: #21273a;
+    line-height: 1.4;
+}
+.ActivityCard__backRating {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #0f1226;
+}
+.ActivityCard__backRating span {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #5f6b89;
+    margin-left: 0.25rem;
+}
+.ActivitySummary {
+    background: #ffffff;
+    border: 1px solid rgba(26, 45, 87, 0.08);
+    border-radius: 1.25rem;
+    padding: 1.75rem;
+    box-shadow: 0 30px 60px -40px rgba(15, 18, 38, 0.4);
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    height: 100%;
+    overflow: hidden;
+}
+.ActivitySummary__placeholder {
+    text-align: center;
+    color: #53607e;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+.ActivitySummary__placeholder h2 {
+    margin-bottom: 0.35rem;
+}
+.ActivitySummary__content {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 0.25rem;
+    scrollbar-gutter: stable both-edges;
+}
+.ActivitySummary__label {
+    font-size: 0.75rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    margin: 0;
+    color: #7a88a8;
+}
+.ActivitySummary__title {
+    margin: 0.1rem 0 0;
+    font-size: clamp(1.4rem, 2vw, 2rem);
+    color: #0f1226;
+}
+.ActivitySummary__location {
+    margin: 0.3rem 0 0;
+    font-size: 0.95rem;
+    color: #5f6b89;
+}
+.ActivitySummary__stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+}
+.ActivitySummary__stat {
+    border-radius: 1rem;
+    padding: 1rem;
+    background: linear-gradient(135deg, rgba(16, 193, 255, 0.12), rgba(95, 128, 255, 0.18));
+    border: 1px solid rgba(16, 193, 255, 0.18);
+}
+.ActivitySummary__statLabel {
+    margin: 0;
+    font-size: 0.85rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #4c5672;
+}
+.ActivitySummary__statValue {
+    margin: 0.4rem 0 0;
+    font-size: 2rem;
+    font-weight: 800;
+    color: #0f1226;
+}
+.ActivitySummary__recent,
+.ActivitySummary__chart {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.ActivitySummary__recent header,
+.ActivitySummary__chart header {
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: #7a88a8;
+}
+.ActivitySummary__recentList {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+.ActivitySummary__recentEmpty {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #5f6b89;
+}
+.ActivitySummary__recentItem {
+    border: 1px solid rgba(26, 45, 87, 0.07);
+    border-radius: 1rem;
+    padding: 0.75rem 1rem;
+    background: #f8fbff;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+.ActivitySummary__recentTop {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-weight: 600;
+    color: #0f1226;
+}
+.ActivitySummary__recentRating {
+    color: #ff8f1f;
+}
+.ActivitySummary__recentMeta {
+    font-size: 0.85rem;
+    color: #5f6b89;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+}
+.ActivitySummary__recentDate {
+    font-size: 0.75rem;
+    color: #9aa3c2;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin: 0.15rem 0;
+    font-weight: 600;
+}
+.ActivitySummary__recentComment {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #384055;
+}
+.ActivitySummary__chartBars {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.ActivitySummary__chartEmpty {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #5f6b89;
+}
+.ActivitySummary__chartRow {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+.ActivitySummary__chartLabel {
+    flex: 0 0 160px;
+    font-size: 0.85rem;
+    color: #4c5672;
+}
+.ActivitySummary__chartBar {
+    flex: 1;
+    height: 12px;
+    border-radius: 999px;
+    background: #e5ecff;
+    overflow: hidden;
+    position: relative;
+}
+.ActivitySummary__chartFill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 0%;
+    border-radius: inherit;
+    transition: width 0.4s ease;
+}
+.ActivitySummary[hidden],
+.ActivitySummary__content[hidden],
+.ActivitySummary__placeholder[hidden] {
+    display: none;
+}
+
+.ActivityList::-webkit-scrollbar,
+.ActivitySummary__content::-webkit-scrollbar,
+.LeftPanel::-webkit-scrollbar {
+    width: 6px;
+}
+.ActivityList::-webkit-scrollbar-thumb,
+.ActivitySummary__content::-webkit-scrollbar-thumb,
+.LeftPanel::-webkit-scrollbar-thumb {
+    background: rgba(26, 45, 87, 0.25);
+    border-radius: 999px;
+}
+
+@media (max-width: 1024px) {
+    .MainLayout {
+        flex-direction: column;
+    }
+    .LeftPanel {
+        flex: none;
+        max-width: none;
+        border-right: none;
+        border-bottom: 1px solid rgba(16, 193, 255, 0.15);
+    }
+}
+
+@media (max-width: 768px) {
+    .ActivitySummary__chartLabel {
+        flex: 0 0 120px;
+        font-size: 0.75rem;
+    }
+}
+
+/* Map on right side */
+
+#map {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    min-height: 400px;
+}
+
+.PopupContent {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.95rem;
+    line-height: 1.4;
+}
+.PopupContent__name {
+    font-weight: 700;
+    color: #1a2d57;
+}
+.PopupContent__address {
+    font-size: 0.85rem;
+    color: #6b7280;
+}
+.PopupContent--preview {
+    font-size: 0.9rem;
+}
+.PopupContent--preview .PopupContent__address {
+    font-size: 0.8rem;
+}
+.PopupContent--suggestion {
+    font-size: 0.9rem;
+}
+.PopupContent--suggestion .PopupContent__address {
+    font-size: 0.8rem;
+}
+
+/* Map status */
+
+.MapStatus {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.65);
+    color: #f9fafb;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    z-index: 1000;
+    max-width: 90%;
+    text-align: center;
+}
+
+.UserLocationIcon {
+    pointer-events: none;
+}
+.UserLocationMarker {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+}
+.UserLocationMarker__label {
+    background: linear-gradient(135deg, #ff5f6d 0%, #ffc371 100%);
+    color: #ffffff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    box-shadow: 0 8px 18px rgba(255, 95, 109, 0.35);
+}
+.UserLocationMarker__dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ff3b30;
+    border: 3px solid #ffffff;
+    box-shadow: 0 0 0 8px rgba(255, 59, 48, 0.18), 0 10px 18px rgba(0, 0, 0, 0.2);
+}
+
+/* Search Suggestions */
+
+.suggestions {
+    position: absolute;
+    top: calc(100% + var(--search-preview-gap, 4px) + var(--search-preview-height, 0px) + 4px);
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    list-style: none;
+    margin: 0;
+    padding: 4px 0;
+    max-height: 260px;
+    overflow-y: auto;
+    z-index: 2000;
+}
+.suggestions li {
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+.suggestions li:hover,
+.suggestions li:focus {
+    background: #eff6ff;
+}
+.LocationAutocomplete .suggestions {
+    top: calc(100% + 4px);
+    z-index: 2500;
+}
+
+/* Modal Style */
+
 body.modal-open {
     overflow: hidden;
 }
@@ -73,6 +780,7 @@ body.modal-open {
     justify-content: center;
     padding: 1.5rem;
     z-index: 1000;
+    overflow-y: auto;
 }
 .Modal__backdrop {
     position: absolute;
@@ -84,13 +792,14 @@ body.modal-open {
     background: #ffffff;
     border-radius: 16px;
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
-    padding: 2rem;
-    max-width: 480px;
-    width: 100%;
+    padding: 1.5rem;
+    width: min(420px, calc(100vw - 2rem));
     display: flex;
     flex-direction: column;
     gap: 1.25rem;
     z-index: 1;
+    max-height: calc(100vh - 3rem);
+    overflow-y: auto;
 }
 .Modal__title {
     margin: 0;
@@ -103,7 +812,7 @@ body.modal-open {
     gap: 0.5rem;
 }
 .NewEntryTitle {
-    height: 72px;
+    height: 58px;
     width: auto;
     object-fit: contain;
 }
@@ -134,13 +843,72 @@ body.modal-open {
     gap: 0.35rem;
 }
 .Modal__form input,
-.Modal__form textarea {
+.Modal__form textarea,
+.Modal__form select {
     border: 1px solid #ccd0d5;
     border-radius: 8px;
     padding: 0.6rem 0.75rem;
     font-size: 1rem;
     font-family: inherit;
     resize: vertical;
+}
+.Modal__ratingLabel {
+    gap: 0.5rem;
+}
+.Modal__ratingHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.Modal__ratingValue {
+    font-weight: 700;
+    color: #10C1FF;
+    font-size: 1rem;
+}
+.StarRating {
+    display: inline-flex;
+    flex-direction: row-reverse;
+    justify-content: flex-end;
+    gap: 0.2rem;
+}
+.StarRating input {
+    position: absolute;
+    opacity: 0;
+}
+.StarRating label {
+    font-size: 1.6rem;
+    line-height: 1;
+    color: #d7dbe2;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+.StarRating label::before {
+    content: '★';
+    display: block;
+}
+.StarRating input:checked ~ label,
+.StarRating label:hover,
+.StarRating label:hover ~ label {
+    color: #ffc107;
+}
+.StarRating input:focus-visible + label {
+    outline: 2px solid #1a2d57;
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+.StarRating--invalid {
+    outline: 2px solid #d64045;
+    border-radius: 6px;
+    padding: 0.1rem 0.25rem;
+}
+.Modal__ratingError {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #d64045;
+}
+.Modal__form textarea[name="comments"] {
+    min-height: 40px;
+    height: 72px;
 }
 .NewEntrySave {
     align-self: flex-end;
@@ -154,4 +922,11 @@ body.modal-open {
 }
 .NewEntrySave:hover {
     background: #1a2d57;
+}
+
+@media (max-width: 520px) {
+    .Modal__dialog {
+        padding: 1.25rem;
+        max-height: calc(100vh - 2rem);
+    }
 }

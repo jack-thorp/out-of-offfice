@@ -1,22 +1,19 @@
-// create map functionality exists on page (if they don't exists yet)
+// Creating arrays to store items during site run
 window.__activityFocusQueue = window.__activityFocusQueue || [];
 window.__mapActionQueue = window.__mapActionQueue || [];
 window.appMap = window.appMap || {};
-
+// queueMapCommand holds map requests until the map script is ready to run them.
 function queueMapCommand(method, args) {
     window.__mapActionQueue.push({ method, args });
 }
-
 if (typeof window.appMap.focusOnEntry !== 'function') {
     window.appMap.focusOnEntry = (entry) => {
-        // if new entry, add to list
+        // if given an entry, add to list of entires to add to list
         if (entry) {
             window.__activityFocusQueue.push(entry);
         }
     };
 }
-
-// check to see if functions are created for handling map
 if (typeof window.appMap.setCapturedEntries !== 'function') {
     window.appMap.setCapturedEntries = (...args) => {
         queueMapCommand('setCapturedEntries', args);
@@ -30,7 +27,6 @@ if (typeof window.appMap.showAllEntries !== 'function') {
 
 // Modal open/close logic
 (function () {
-    // grab modal from page
     const body = document.body;
     const modal = document.getElementById('new-entry-modal');
     const openButton = document.querySelector('[data-action="open-modal"]');
@@ -41,13 +37,14 @@ if (typeof window.appMap.showAllEntries !== 'function') {
     const closeElements = modal.querySelectorAll('[data-modal-close]');
     const form = modal.querySelector('form');
 
-    // show modal (and lock page behind it)
+    // opens the new entry modal
     function openModal() {
         modal.hidden = false;
         modal.setAttribute('aria-hidden', 'false');
         body.classList.add('modal-open');
     }
-    // hide modal and reset forms inside (so they're not populated if you press New Entry again)
+
+    // closes new entry modal
     function closeModal() {
         modal.hidden = true;
         modal.setAttribute('aria-hidden', 'true');
@@ -56,11 +53,10 @@ if (typeof window.appMap.showAllEntries !== 'function') {
             form.reset();
         }
     }
-    // add modal show when New Entry clicked
+
     openButton.addEventListener('click', openModal);
     closeElements.forEach((el) => el.addEventListener('click', closeModal));
 
-    // if I press 'ESC' key, it'll close the modal (if open)
     window.addEventListener('keydown', (event) => {
         if (event.key === 'Escape' && modal.hidden === false) {
             closeModal();
@@ -70,18 +66,29 @@ if (typeof window.appMap.showAllEntries !== 'function') {
 
 // Rating star display updater
 (function () {
-    // get modal for new entry
+    // get new entry popup modal
     const modal = document.getElementById('new-entry-modal');
     if (!modal) {
         return;
     }
-    // grab elements for rating selection
+
     const ratingInputs = modal.querySelectorAll('input[name="rating"]');
     const display = modal.querySelector('[data-rating-display]');
     const errorEl = modal.querySelector('[data-rating-error]');
     const starGroup = modal.querySelector('.StarRating');
 
-    // updates visable rating when selected
+    // display warning if no rating is selected
+    const setInvalidState = (isInvalid) => {
+        if (errorEl) {
+            errorEl.hidden = !isInvalid;
+        }
+        if (starGroup) {
+            starGroup.classList.toggle('StarRating--invalid', isInvalid);
+            starGroup.setAttribute('aria-invalid', isInvalid ? 'true' : 'false');
+        }
+    };
+
+    // display the number rating next to stars (x/5)
     const updateValue = () => {
         const checked = modal.querySelector('input[name="rating"]:checked');
         display.textContent = checked ? checked.value : '0';
@@ -90,18 +97,18 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         }
     };
 
-    // whenever the star rating changes, update the value displayed
+    // handles whenever change to stars, ensure the x/5 updated appropriately
     ratingInputs.forEach((input) => {
         input.addEventListener('change', updateValue);
         input.addEventListener('input', updateValue);
     });
 
-    // prevent save
     const form = modal.querySelector('form');
     if (form) {
         form.addEventListener('submit', (event) => {
             const checked = modal.querySelector('input[name="rating"]:checked');
             if (!checked) {
+                // handle requiring star selection!
                 event.preventDefault();
                 setInvalidState(true);
                 if (ratingInputs.length) {
@@ -111,7 +118,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
                 setInvalidState(false);
             }
         });
-
+        // when the form is reset, clear display to "normal" state
         form.addEventListener('reset', () => {
             requestAnimationFrame(() => {
                 updateValue();
@@ -126,18 +133,16 @@ if (typeof window.appMap.showAllEntries !== 'function') {
 
 // Activity panel logic
 (function () {
+    // grab activity container in DOM
     const activityListEl = document.querySelector('[data-activity-list]');
     const filterButtons = Array.from(document.querySelectorAll('.ActivityFilter[data-filter]'));
-
-    if (!activityListEl || !filterButtons.length) {
-        return;
-    }
 
     const mapBridge = window.appMap || (window.appMap = {});
     const modal = document.getElementById('new-entry-modal');
     const form = modal ? modal.querySelector('form') : null;
     const body = document.body;
 
+    // -------- Spot Summary panel --------
     const summaryEl = document.querySelector('[data-activity-summary]');
     const summaryPlaceholder = summaryEl ? summaryEl.querySelector('[data-summary-placeholder]') : null;
     const summaryContent = summaryEl ? summaryEl.querySelector('[data-summary-content]') : null;
@@ -147,6 +152,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
     const summaryCount = summaryEl ? summaryEl.querySelector('[data-summary-count]') : null;
     const summaryRecent = summaryEl ? summaryEl.querySelector('[data-summary-recent]') : null;
     const summaryChart = summaryEl ? summaryEl.querySelector('[data-summary-chart]') : null;
+    // double checking everything is in UI (used later before function logic)
     const hasSummaryUI = Boolean(
         summaryEl &&
         summaryPlaceholder &&
@@ -158,16 +164,19 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         summaryRecent &&
         summaryChart
     );
+    // -------- Activity List panel --------
     const activityConsole = document.querySelector('[data-activity-console]');
     const viewToggleButtons = activityConsole ? Array.from(activityConsole.querySelectorAll('[data-view-target]')) : [];
     const listFace = activityConsole ? activityConsole.querySelector('.ActivityConsole__face--list') : null;
     const summaryFace = activityConsole ? activityConsole.querySelector('.ActivityConsole__face--summary') : null;
 
+    // handle if no records in DB
     const emptyStateTemplate = activityListEl.querySelector('[data-empty-state]');
     if (emptyStateTemplate) {
         emptyStateTemplate.remove();
     }
 
+    // for graph in Spot Summary
     const VIBE_COLORS = {
         'Lock In (Deep Focus)': '#10C1FF',
         'Creative Coding Environment': '#5f80ff',
@@ -181,14 +190,18 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         'Unproductive',
     ];
 
+    // Defining Sorting Rules Based on Selected View
     const FILTER_SORTERS = {
+        // Recent Activity
         recent: (a, b) => b.createdAt - a.createdAt,
+        // Top Ranked
         top: (a, b) => {
             if (b.rating === a.rating) {
                 return b.createdAt - a.createdAt;
             }
             return b.rating - a.rating;
         },
+        // Most Visited
         visited: (a, b) => {
             if (b.visits === a.visits) {
                 return b.createdAt - a.createdAt;
@@ -197,6 +210,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         },
     };
 
+    // Hold all activities and UI selection(s)
     const activityState = {
         entries: [],
         selectedId: null,
@@ -205,26 +219,31 @@ if (typeof window.appMap.showAllEntries !== 'function') {
     };
     const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
 
+    // syncMapEntries shares our current entries with the map widget.
     function syncMapEntries() {
         if (typeof mapBridge.setCapturedEntries === 'function') {
             mapBridge.setCapturedEntries(activityState.entries);
         }
     }
 
+    // resetMapToAllEntries tells the map to zoom back out to everything
     function resetMapToAllEntries() {
         if (typeof mapBridge.showAllEntries === 'function') {
             mapBridge.showAllEntries();
         }
     }
 
+    // normalizeKey builds a simple lowercase key so duplicates match up
     function normalizeKey(value) {
         return (value || '').toString().trim().toLowerCase();
     }
 
+    // formatRating keeps the rating text tidy (no “4.0” style tails)
     function formatRating(value) {
         return Number(value || 0).toFixed(1).replace(/\.0$/, '');
     }
 
+    // formatDate turns timestamps into the "Nov 8” labels on the cards
     function formatDate(value) {
         if (!value) {
             return '';
@@ -236,6 +255,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         return dateFormatter.format(date);
     }
 
+    // truncate long strings so they don’t overflow the layout
     function truncate(text, maxLength = 120) {
         if (!text) {
             return '';
@@ -246,6 +266,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         return `${text.slice(0, maxLength - 3).trim()}...`;
     }
 
+    // keep the UI from switching to a summary view that doesn’t exist
     function resolveView(nextView) {
         if (nextView === 'summary' && !hasSummaryUI) {
             return 'list';
@@ -253,6 +274,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         return nextView === 'summary' ? 'summary' : 'list';
     }
 
+    // keep the toggle buttons in sync
     function syncViewToggle() {
         if (!activityConsole) {
             return;
@@ -310,6 +332,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         syncViewToggle();
     }
 
+    // clearLocationDatasets erases any caches latitude and longitude
     function clearLocationDatasets() {
         if (!form) {
             return;
@@ -323,6 +346,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         }
     }
 
+    // helps form new entry
     function buildEntryFromForm() {
         if (!form) {
             return null;
@@ -334,7 +358,6 @@ if (typeof window.appMap.showAllEntries !== 'function') {
 
         const nameValue = (formData.get('name') || '').toString().trim();
         const vibeValue = (formData.get('vibeCategory') || '').toString().trim();
-        const celebValue = (formData.get('celeb') || '').toString().trim();
         const commentsValue = (formData.get('comments') || '').toString().trim();
         const locationValue = (formData.get('location') || '').toString().trim();
         const ratingValue = ratingInput ? Number(ratingInput.value) : 0;
@@ -350,7 +373,6 @@ if (typeof window.appMap.showAllEntries !== 'function') {
             placeKey: normalizeKey(place),
             name: nameValue,
             vibe: vibeValue,
-            celeb: celebValue,
             comments: commentsValue,
             locationDisplay: locationDisplay || 'Location TBD',
             rating: ratingValue,
@@ -365,6 +387,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         };
     }
 
+    // getEntriesForFilter figures out which entries should appear
     function getEntriesForFilter() {
         if (activityState.filter === 'recent') {
             return activityState.entries;
@@ -383,12 +406,14 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         return Array.from(latestByPlace.values());
     }
 
+    // getSortedEntries applies sorting rules
     function getSortedEntries() {
         const baseEntries = getEntriesForFilter();
         const sorter = FILTER_SORTERS[activityState.filter] || FILTER_SORTERS.recent;
         return [...baseEntries].sort(sorter);
     }
 
+    // grabs places in view
     function getEntriesForPlace(entryOrKey) {
         const key =
             typeof entryOrKey === 'string'
@@ -400,6 +425,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         return activityState.entries.filter((item) => item.placeKey === key);
     }
 
+    // rebuilds left panel UI for what data we got
     function renderList() {
         const entries = getSortedEntries();
         activityListEl.innerHTML = '';
@@ -556,10 +582,13 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         });
     }
 
+    // Builds Vibe Breakdown Chart
     function renderVibeChart(entriesForPlace) {
         if (!summaryChart) {
             return;
         }
+
+        // clear anything previously
         summaryChart.innerHTML = '';
 
         if (!entriesForPlace.length) {
@@ -569,7 +598,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
             summaryChart.appendChild(emptyMessage);
             return;
         }
-
+        // count how many times each vibe shows up
         const counts = new Map();
         entriesForPlace.forEach((entry) => {
             const key = entry.vibe || 'Vibe TBD';
@@ -578,6 +607,8 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         const total = entriesForPlace.length || 1;
 
         const vibesToRender = [
+            // start with our vibe order, and then add extra vibes added
+                // to look at removing later after switching to dropdown list (instead of type in)
             ...VIBE_ORDER,
             ...Array.from(counts.keys()).filter((key) => !VIBE_ORDER.includes(key)),
         ];
@@ -617,6 +648,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         }
     }
 
+    // renderSummary fills the right column card (or shows the empty state) for a spot.
     function renderSummary(entry) {
         if (!hasSummaryUI) {
             return;
@@ -634,6 +666,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         summaryLocation.textContent = entry.locationDisplay || 'Location TBD';
 
         const related = getEntriesForPlace(entry);
+            // get avg. rating for spot
         const ratingTotal = related.reduce((sum, item) => sum + (Number(item.rating) || 0), 0);
         const average = related.length ? ratingTotal / related.length : entry.rating || 0;
 
@@ -644,6 +677,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         renderVibeChart(related);
     }
 
+    // focusMapOnEntry forwards the selected item to the Leaflet map.
     function focusMapOnEntry(entry) {
         if (!entry || typeof mapBridge.focusOnEntry !== 'function') {
             return;
@@ -651,6 +685,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         mapBridge.focusOnEntry(entry);
     }
 
+    // selectEntry is our shared handler for picking a card, whether from list or map.
     function selectEntry(entryId, options = {}) {
         const entry = activityState.entries.find((item) => item.id === entryId);
         if (!entry) {
@@ -672,6 +707,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         }
     }
 
+    // highlights whatever filter we have selected
     function syncFilterButtons() {
         filterButtons.forEach((button) => {
             const isActive = button.dataset.filter === activityState.filter;
@@ -704,6 +740,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         activityState.selectedId = entries[0].id;
     }
 
+    // applyFilter flips the active filter tab
     function applyFilter(nextFilter, options = {}) {
         if (!nextFilter || nextFilter === activityState.filter) {
             return;
@@ -711,10 +748,11 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         const shouldFocusMap = options.focusMap !== false;
         activityState.filter = nextFilter;
         syncFilterButtons();
-
+            // get entry before sorting
         const sorted = getSortedEntries();
         syncSelectedIdForFilter(sorted);
 
+            // rebuild the left-hand
         renderList();
         if (activityState.selectedId) {
             const selectedEntry = activityState.entries.find((item) => item.id === activityState.selectedId);
@@ -732,6 +770,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         }
     }
 
+    // hydrateFilters hooks up the filter buttons to the applyFilter helper.
     function hydrateFilters() {
         filterButtons.forEach((button) => {
             button.addEventListener('click', () => {
@@ -741,6 +780,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         syncFilterButtons();
     }
 
+    // hide's modal if open
     function closeModalIfOpen() {
         if (!modal || modal.hidden === true) {
             return;
@@ -767,16 +807,18 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         closeModalIfOpen();
     }
 
+    // FOR TESTING AND DEV
     function seedEntries() {
         const now = Date.now();
         const presets = [
             {
                 id: 'seed-methodical',
-                place: 'Methodical Coffee (Camperdown)',
+                place: 'Methodical Downtown',
                 name: 'Sam T.',
                 vibe: 'Lock In (Deep Focus)',
                 comments: 'Good Coffee! Love being in downtown. Upstairs can be packed if you do not get there at the right time',
-                locationDisplay: 'Methodical Coffee, 101, North Main Street, Downtown, Greenville, Greenville County, South Carolina, 29601, United States',
+                locationDisplay: 'Methodical Coffee, 101 North Main Street, Downtown, Greenville, Greenville County, South Carolina, 29601, United States',
+                locationQuery: '101 North Main Street, Greenville, Greenville County, South Carolina, 29601',
                 rating: 4,
                 createdAt: now - 1000 * 60 * 60 * 4,
                 visits: 5,
@@ -787,7 +829,8 @@ if (typeof window.appMap.showAllEntries !== 'function') {
                 name: 'Jack T.',
                 vibe: 'Social Brainstorm Jam',
                 comments: 'chill vibe grabbing a beer and sitting outside',
-                locationDisplay: 'The Commons, 147 Welborn St Suite B1, Greenville, SC 29601, United States',
+                locationDisplay: 'The Commons, 147 Welborn Street, Greenville, South Carolina 29601, United States',
+                locationQuery: 'The Commons, Greenville, South Carolina',
                 rating: 3,
                 createdAt: now - 1000 * 60 * 60 * 26,
                 visits: 8,
@@ -799,6 +842,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
                 vibe: 'Creative Coding Environment',
                 comments: 'fun to get a coffee and beer at!',
                 locationDisplay: 'Grateful Brew, 501 South Pleasantburg Drive, Cavalier Heights, Greenville, Greenville County, South Carolina, 29607, United States',
+                locationQuery: 'Grateful Brew, Greenville, South Carolina',
                 rating: 4,
                 createdAt: now - 1000 * 60 * 60 * 72,
                 visits: 6,
@@ -875,6 +919,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         return;
     }
 
+    // initializeMap boots Leaflet, wires up helpers, and starts loading tiles.
     function initializeMap() {
         const mapContainer = document.getElementById('map');
         if (!mapContainer) {
@@ -1132,93 +1177,28 @@ if (typeof window.appMap.showAllEntries !== 'function') {
             }
         }
 
-        function normalizeQuery(value) {
-            return value
-                .replace(/\u00A0/g, ' ')
-                .replace(/\s+/g, ' ')
-                .trim();
-        }
-
-        function stripParenthetical(value) {
-            return value.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
-        }
-
-        function buildQueryVariants(value) {
-            const variants = [];
-            if (!value) {
-                return variants;
-            }
-            const trimmed = normalizeQuery(String(value));
-            if (!trimmed) {
-                return variants;
-            }
-            variants.push(trimmed);
-            const withoutParens = stripParenthetical(trimmed);
-            if (withoutParens && withoutParens !== trimmed) {
-                variants.push(withoutParens);
-            }
-            const parsed = parseDisplayName(trimmed);
-            if (parsed.displayName && parsed.displayName !== trimmed) {
-                variants.push(parsed.displayName);
-            }
-            if (parsed.name) {
-                variants.push(parsed.name);
-            }
-            if (parsed.address) {
-                variants.push(parsed.address);
-                if (parsed.name) {
-                    variants.push(`${parsed.name}, ${parsed.address}`);
+        function buildGeocodeQueries(entry) {
+            const queries = [];
+            const pushQuery = (value) => {
+                const trimmed = (value || '').toString().trim();
+                if (trimmed && !queries.includes(trimmed)) {
+                    queries.push(trimmed);
                 }
-            }
-            return variants;
-        }
+            };
 
-        function collectEntryQueries(entry) {
-            const candidates = new Set();
-            buildQueryVariants(entry?.locationDisplay).forEach((variant) => candidates.add(variant));
-            buildQueryVariants(entry?.place).forEach((variant) => candidates.add(variant));
-            return Array.from(candidates).filter(Boolean);
-        }
+            pushQuery(entry?.locationQuery);
+            pushQuery(entry?.locationDisplay);
+            pushQuery(entry?.place);
 
-        async function resolveCoordinatesForQuery(rawQuery) {
-            const query = (rawQuery || '').trim();
-            if (!query) {
-                return null;
+            const parsed = parseDisplayName(entry?.locationDisplay || entry?.place || '');
+            pushQuery(parsed.displayName);
+            if (parsed.name && parsed.address) {
+                pushQuery(`${parsed.name}, ${parsed.address}`);
             }
-            const cacheKey = query.toLowerCase();
-            if (coordinateCache.has(cacheKey)) {
-                return coordinateCache.get(cacheKey);
-            }
-            if (pendingCoordinateLookups.has(cacheKey)) {
-                return pendingCoordinateLookups.get(cacheKey);
-            }
-            const lookupPromise = (async () => {
-                try {
-                    const [match] = await fetchPlaces(query, {
-                        limit: 1,
-                        minLength: 1,
-                        enforceMinLength: false,
-                    });
-                    if (!match) {
-                        return null;
-                    }
-                    const lat = Number(match.lat);
-                    const lon = Number(match.lon);
-                    if (Number.isNaN(lat) || Number.isNaN(lon)) {
-                        return null;
-                    }
-                    const coords = { lat, lon };
-                    coordinateCache.set(cacheKey, coords);
-                    return coords;
-                } catch (err) {
-                    console.error('Failed to resolve entry location', err);
-                    return null;
-                } finally {
-                    pendingCoordinateLookups.delete(cacheKey);
-                }
-            })();
-            pendingCoordinateLookups.set(cacheKey, lookupPromise);
-            return lookupPromise;
+            pushQuery(parsed.address);
+            pushQuery(parsed.name);
+
+            return queries;
         }
 
         async function ensureEntryCoordinates(entry) {
@@ -1230,16 +1210,59 @@ if (typeof window.appMap.showAllEntries !== 'function') {
                 return entry.coordinates;
             }
 
-            const queries = collectEntryQueries(entry);
-
+            const queries = buildGeocodeQueries(entry);
             for (const query of queries) {
-                const coords = await resolveCoordinatesForQuery(query);
-                if (coords) {
-                    entry.coordinates = coords;
-                    return coords;
+                const cacheKey = query.toLowerCase();
+                if (coordinateCache.has(cacheKey)) {
+                    const cached = coordinateCache.get(cacheKey);
+                    entry.coordinates = cached;
+                    return cached;
+                }
+                if (pendingCoordinateLookups.has(cacheKey)) {
+                    const pending = pendingCoordinateLookups.get(cacheKey);
+                    const resolvedPending = await pending;
+                    if (resolvedPending) {
+                        entry.coordinates = resolvedPending;
+                        return resolvedPending;
+                    }
+                    continue;
+                }
+                const lookupPromise = (async () => {
+                    try {
+                        const [match] = await fetchPlaces(query, {
+                            limit: 1,
+                            minLength: 1,
+                            enforceMinLength: false,
+                        });
+                        if (!match) {
+                            return null;
+                        }
+                        const lat = Number(match.lat);
+                        const lon = Number(match.lon);
+                        if (Number.isNaN(lat) || Number.isNaN(lon)) {
+                            return null;
+                        }
+                        const coords = { lat, lon };
+                        coordinateCache.set(cacheKey, coords);
+                        return coords;
+                    } catch (err) {
+                        console.error('Failed to resolve entry location', err);
+                        return null;
+                    } finally {
+                        pendingCoordinateLookups.delete(cacheKey);
+                    }
+                })();
+                pendingCoordinateLookups.set(cacheKey, lookupPromise);
+                const resolved = await lookupPromise;
+                if (resolved) {
+                    entry.coordinates = resolved;
+                    return resolved;
                 }
             }
 
+            if (hasCoordinates(entry.coordinates)) {
+                return entry.coordinates;
+            }
             return null;
         }
 
@@ -1433,15 +1456,18 @@ if (typeof window.appMap.showAllEntries !== 'function') {
             }
         }
 
+        // rebuilds the preview based on the current input text
         function updateSearchPreview(value) {
             const html = buildPreviewMarkup(value);
             setSearchPreviewContent(html);
         }
 
+        // wipes the preview block entirely
         function clearSearchPreview() {
             setSearchPreviewContent('');
         }
 
+        // fills the search field with the nicely formatted place name
         function applyPlaceToInput(place) {
             const parsed = parseDisplayName(place);
             const value = parsed.name || parsed.displayName || '';
@@ -1451,6 +1477,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
             clearSearchPreview();
         }
 
+        // hides the dropdown list and clears out old results
         function clearSuggestions() {
             suggestionsEl.style.display = 'none';
             suggestionsEl.setAttribute('aria-expanded', 'false');
@@ -1459,6 +1486,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
 
         updateSearchPreview(inputEl.value);
 
+        // centers the map on a search result and drops a marker
         function goToPlace(place) {
             const lat = parseFloat(place.lat);
             const lon = parseFloat(place.lon);
@@ -1484,6 +1512,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
             applyPlaceToInput(place);
         }
 
+        // handles the submit action for the top search form
         async function searchLocation(query) {
             if (!query) {
                 updateSearchPreview('');
@@ -1527,6 +1556,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
             }
         }
 
+        // live search dropdown as you type
         async function fetchSuggestions(query) {
             if (!query || query.length < 3) {
                 clearSuggestions();

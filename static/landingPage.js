@@ -2,6 +2,7 @@
 window.__activityFocusQueue = window.__activityFocusQueue || [];
 window.__mapActionQueue = window.__mapActionQueue || [];
 window.appMap = window.appMap || {};
+debugger;
 // queueMapCommand holds map requests until the map script is ready to run them.
 function queueMapCommand(method, args) {
     window.__mapActionQueue.push({ method, args });
@@ -25,60 +26,90 @@ if (typeof window.appMap.showAllEntries !== 'function') {
     };
 }
 
-// Modal open/close logic
-(function () {
-    const body = document.body;
-    const modal = document.getElementById('new-entry-modal');
-    const openButton = document.querySelector('[data-action="open-modal"]');
-    if (!modal || !openButton) {
-        return;
+//constants
+const GREENVILLE_CENTER = [34.8526, -82.3940];
+const DEFAULT_PLACE = {
+    display_name: 'Greenville, SC',
+    lat: String(GREENVILLE_CENTER[0]),
+    lon: String(GREENVILLE_CENTER[1]),
+};
+const NOMINATIM_BASE_URL = 'https://nominatim.openstreetmap.org/search';
+const NOMINATIM_VIEWBOX = '-82.6,35.1,-82.1,34.6';
+const HTML_ESCAPE_LOOKUP = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+}
+
+var currentMarker = null;
+var mapContainer = null;
+var statusEl = null;
+
+var body = document.body;
+var modal = document.getElementById('new-entry-modal');
+var openButton = document.querySelector('[data-action="open-modal"]');
+var closeElements = modal.querySelectorAll('[data-modal-close]');
+var form = modal.querySelector('form');
+
+//FILL THIS IN WHEN WE CAN GET USER NAME
+function getName() {
+    return 'My Name';
+}
+
+// opens the new entry modal
+function openModal(formDefs = false) {
+
+    modal.hidden = false;
+    modal.setAttribute('aria-hidden', 'false');
+    body.classList.add('modal-open');
+    //fill in values automatically
+    if (formDefs) {
+        form.querySelector('input[name="name"]').value = formDefs.name;
+        form.querySelector('input[name="location"]').value = formDefs.location;
     }
+}
 
-    const closeElements = modal.querySelectorAll('[data-modal-close]');
-    const form = modal.querySelector('form');
-
-    // opens the new entry modal
-    function openModal() {
-        modal.hidden = false;
-        modal.setAttribute('aria-hidden', 'false');
-        body.classList.add('modal-open');
+// closes new entry modal
+function closeModal() {
+    modal.hidden = true;
+    modal.setAttribute('aria-hidden', 'true');
+    body.classList.remove('modal-open');
+    if (form) {
+        form.reset();
     }
+}
 
-    // closes new entry modal
-    function closeModal() {
-        modal.hidden = true;
-        modal.setAttribute('aria-hidden', 'true');
-        body.classList.remove('modal-open');
-        if (form) {
-            form.reset();
-        }
+//changed to prevent default args from flowing
+openButton.addEventListener('click', () => openModal());
+
+closeElements.forEach((el) => el.addEventListener('click', closeModal));
+
+window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && modal.hidden === false) {
+        closeModal();
     }
+});
 
-    openButton.addEventListener('click', openModal);
-    closeElements.forEach((el) => el.addEventListener('click', closeModal));
 
-    window.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape' && modal.hidden === false) {
-            closeModal();
-        }
-    });
-}());
+
 
 // Rating star display updater
 (function () {
     // get new entry popup modal
-    const modal = document.getElementById('new-entry-modal');
+    var modal = document.getElementById('new-entry-modal');
     if (!modal) {
         return;
     }
 
-    const ratingInputs = modal.querySelectorAll('input[name="rating"]');
-    const display = modal.querySelector('[data-rating-display]');
-    const errorEl = modal.querySelector('[data-rating-error]');
-    const starGroup = modal.querySelector('.StarRating');
+    var ratingInputs = modal.querySelectorAll('input[name="rating"]');
+    var display = modal.querySelector('[data-rating-display]');
+    var errorEl = modal.querySelector('[data-rating-error]');
+    var starGroup = modal.querySelector('.StarRating');
 
     // display warning if no rating is selected
-    const setInvalidState = (isInvalid) => {
+    var setInvalidState = (isInvalid) => {
         if (errorEl) {
             errorEl.hidden = !isInvalid;
         }
@@ -89,8 +120,8 @@ if (typeof window.appMap.showAllEntries !== 'function') {
     };
 
     // display the number rating next to stars (x/5)
-    const updateValue = () => {
-        const checked = modal.querySelector('input[name="rating"]:checked');
+    var updateValue = () => {
+        var checked = modal.querySelector('input[name="rating"]:checked');
         display.textContent = checked ? checked.value : '0';
         if (checked) {
             setInvalidState(false);
@@ -103,10 +134,10 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         input.addEventListener('input', updateValue);
     });
 
-    const form = modal.querySelector('form');
+    var form = modal.querySelector('form');
     if (form) {
         form.addEventListener('submit', (event) => {
-            const checked = modal.querySelector('input[name="rating"]:checked');
+            var checked = modal.querySelector('input[name="rating"]:checked');
             if (!checked) {
                 // handle requiring star selection!
                 event.preventDefault();
@@ -134,26 +165,26 @@ if (typeof window.appMap.showAllEntries !== 'function') {
 // Activity panel logic
 (function () {
     // grab activity container in DOM
-    const activityListEl = document.querySelector('[data-activity-list]');
-    const filterButtons = Array.from(document.querySelectorAll('.ActivityFilter[data-filter]'));
+    var activityListEl = document.querySelector('[data-activity-list]');
+    var filterButtons = Array.from(document.querySelectorAll('.ActivityFilter[data-filter]'));
 
-    const mapBridge = window.appMap || (window.appMap = {});
-    const modal = document.getElementById('new-entry-modal');
-    const form = modal ? modal.querySelector('form') : null;
-    const body = document.body;
+    var mapBridge = window.appMap || (window.appMap = {});
+    var modal = document.getElementById('new-entry-modal');
+    var form = modal ? modal.querySelector('form') : null;
+    var body = document.body;
 
     // -------- Spot Summary panel --------
-    const summaryEl = document.querySelector('[data-activity-summary]');
-    const summaryPlaceholder = summaryEl ? summaryEl.querySelector('[data-summary-placeholder]') : null;
-    const summaryContent = summaryEl ? summaryEl.querySelector('[data-summary-content]') : null;
-    const summaryTitle = summaryEl ? summaryEl.querySelector('[data-summary-title]') : null;
-    const summaryLocation = summaryEl ? summaryEl.querySelector('[data-summary-location]') : null;
-    const summaryRating = summaryEl ? summaryEl.querySelector('[data-summary-rating]') : null;
-    const summaryCount = summaryEl ? summaryEl.querySelector('[data-summary-count]') : null;
-    const summaryRecent = summaryEl ? summaryEl.querySelector('[data-summary-recent]') : null;
-    const summaryChart = summaryEl ? summaryEl.querySelector('[data-summary-chart]') : null;
+    var summaryEl = document.querySelector('[data-activity-summary]');
+    var summaryPlaceholder = summaryEl ? summaryEl.querySelector('[data-summary-placeholder]') : null;
+    var summaryContent = summaryEl ? summaryEl.querySelector('[data-summary-content]') : null;
+    var summaryTitle = summaryEl ? summaryEl.querySelector('[data-summary-title]') : null;
+    var summaryLocation = summaryEl ? summaryEl.querySelector('[data-summary-location]') : null;
+    var summaryRating = summaryEl ? summaryEl.querySelector('[data-summary-rating]') : null;
+    var summaryCount = summaryEl ? summaryEl.querySelector('[data-summary-count]') : null;
+    var summaryRecent = summaryEl ? summaryEl.querySelector('[data-summary-recent]') : null;
+    var summaryChart = summaryEl ? summaryEl.querySelector('[data-summary-chart]') : null;
     // double checking everything is in UI (used later before function logic)
-    const hasSummaryUI = Boolean(
+    var hasSummaryUI = Boolean(
         summaryEl &&
         summaryPlaceholder &&
         summaryContent &&
@@ -165,25 +196,25 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         summaryChart
     );
     // -------- Activity List panel --------
-    const activityConsole = document.querySelector('[data-activity-console]');
-    const viewToggleButtons = activityConsole ? Array.from(activityConsole.querySelectorAll('[data-view-target]')) : [];
-    const listFace = activityConsole ? activityConsole.querySelector('.ActivityConsole__face--list') : null;
-    const summaryFace = activityConsole ? activityConsole.querySelector('.ActivityConsole__face--summary') : null;
+    var activityConsole = document.querySelector('[data-activity-console]');
+    var viewToggleButtons = activityConsole ? Array.from(activityConsole.querySelectorAll('[data-view-target]')) : [];
+    var listFace = activityConsole ? activityConsole.querySelector('.ActivityConsole__face--list') : null;
+    var summaryFace = activityConsole ? activityConsole.querySelector('.ActivityConsole__face--summary') : null;
 
     // handle if no records in DB
-    const emptyStateTemplate = activityListEl.querySelector('[data-empty-state]');
+    var emptyStateTemplate = activityListEl.querySelector('[data-empty-state]');
     if (emptyStateTemplate) {
         emptyStateTemplate.remove();
     }
 
     // for graph in Spot Summary
-    const VIBE_COLORS = {
+    var VIBE_COLORS = {
         'Lock In (Deep Focus)': '#10C1FF',
         'Creative Coding Environment': '#5f80ff',
         'Social Brainstorm Jam': '#ff87d7',
         'Unproductive': '#ffb347',
     };
-    const VIBE_ORDER = [
+    var VIBE_ORDER = [
         'Lock In (Deep Focus)',
         'Creative Coding Environment',
         'Social Brainstorm Jam',
@@ -191,7 +222,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
     ];
 
     // Defining Sorting Rules Based on Selected View
-    const FILTER_SORTERS = {
+    var FILTER_SORTERS = {
         // Recent Activity
         recent: (a, b) => b.createdAt - a.createdAt,
         // Top Ranked
@@ -211,13 +242,13 @@ if (typeof window.appMap.showAllEntries !== 'function') {
     };
 
     // Hold all activities and UI selection(s)
-    const activityState = {
+    var activityState = {
         entries: [],
         selectedId: null,
         filter: 'recent',
         view: 'list',
     };
-    const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
+    var dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' });
 
     // syncMapEntries shares our current entries with the map widget.
     function syncMapEntries() {
@@ -248,7 +279,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         if (!value) {
             return '';
         }
-        const date = new Date(value);
+        var date = new Date(value);
         if (Number.isNaN(date.getTime())) {
             return '';
         }
@@ -279,11 +310,11 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         if (!activityConsole) {
             return;
         }
-        const currentView = resolveView(activityState.view);
+        var currentView = resolveView(activityState.view);
         activityState.view = currentView;
         activityConsole.dataset.view = currentView;
         viewToggleButtons.forEach((button) => {
-            const isActive = button.dataset.viewTarget === currentView;
+            var isActive = button.dataset.viewTarget === currentView;
             button.classList.toggle('is-active', isActive);
             button.setAttribute('aria-selected', isActive ? 'true' : 'false');
             button.tabIndex = isActive ? 0 : -1;
@@ -297,8 +328,8 @@ if (typeof window.appMap.showAllEntries !== 'function') {
     }
 
     function setConsoleView(nextView) {
-        const resolved = resolveView(nextView);
-        const previousView = activityState.view;
+        var resolved = resolveView(nextView);
+        var previousView = activityState.view;
         if (previousView !== resolved) {
             activityState.view = resolved;
         }
@@ -321,9 +352,9 @@ if (typeof window.appMap.showAllEntries !== 'function') {
                     return;
                 }
                 event.preventDefault();
-                const targetView = event.key === 'ArrowLeft' ? 'list' : 'summary';
+                var targetView = event.key === 'ArrowLeft' ? 'list' : 'summary';
                 setConsoleView(targetView);
-                const focusTarget = viewToggleButtons.find((el) => el.dataset.viewTarget === activityState.view);
+                var focusTarget = viewToggleButtons.find((el) => el.dataset.viewTarget === activityState.view);
                 if (focusTarget) {
                     focusTarget.focus();
                 }
@@ -337,7 +368,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         if (!form) {
             return;
         }
-        const locationInput = form.querySelector('input[name="location"]');
+        var locationInput = form.querySelector('input[name="location"]');
         if (locationInput) {
             delete locationInput.dataset.lat;
             delete locationInput.dataset.lon;
@@ -352,20 +383,20 @@ if (typeof window.appMap.showAllEntries !== 'function') {
             return null;
         }
 
-        const formData = new FormData(form);
-        const locationInput = form.querySelector('input[name="location"]');
-        const ratingInput = form.querySelector('input[name="rating"]:checked');
+        var formData = new FormData(form);
+        var locationInput = form.querySelector('input[name="location"]');
+        var ratingInput = form.querySelector('input[name="rating"]:checked');
 
-        const nameValue = (formData.get('name') || '').toString().trim();
-        const vibeValue = (formData.get('vibeCategory') || '').toString().trim();
-        const commentsValue = (formData.get('comments') || '').toString().trim();
-        const locationValue = (formData.get('location') || '').toString().trim();
-        const ratingValue = ratingInput ? Number(ratingInput.value) : 0;
-        const datasetPlace = locationInput?.dataset.placeName || '';
-        const datasetDisplay = locationInput?.dataset.displayName || '';
+        var nameValue = (formData.get('name') || '').toString().trim();
+        var vibeValue = (formData.get('vibeCategory') || '').toString().trim();
+        var commentsValue = (formData.get('comments') || '').toString().trim();
+        var locationValue = (formData.get('location') || '').toString().trim();
+        var ratingValue = ratingInput ? Number(ratingInput.value) : 0;
+        var datasetPlace = locationInput?.dataset.placeName || '';
+        var datasetDisplay = locationInput?.dataset.displayName || '';
 
-        const place = (datasetPlace || locationValue || 'Untitled Spot').trim();
-        const locationDisplay = (datasetDisplay || locationValue || place || 'Location TBD').trim();
+        var place = (datasetPlace || locationValue || 'Untitled Spot').trim();
+        var locationDisplay = (datasetDisplay || locationValue || place || 'Location TBD').trim();
 
         return {
             id: `entry-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
@@ -392,13 +423,13 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         if (activityState.filter === 'recent') {
             return activityState.entries;
         }
-        const latestByPlace = new Map();
+        var latestByPlace = new Map();
         activityState.entries.forEach((entry) => {
-            const key = entry.placeKey || normalizeKey(entry.place);
+            var key = entry.placeKey || normalizeKey(entry.place);
             if (!key) {
                 return;
             }
-            const current = latestByPlace.get(key);
+            var current = latestByPlace.get(key);
             if (!current || entry.createdAt > current.createdAt) {
                 latestByPlace.set(key, entry);
             }
@@ -408,14 +439,14 @@ if (typeof window.appMap.showAllEntries !== 'function') {
 
     // getSortedEntries applies sorting rules
     function getSortedEntries() {
-        const baseEntries = getEntriesForFilter();
-        const sorter = FILTER_SORTERS[activityState.filter] || FILTER_SORTERS.recent;
+        var baseEntries = getEntriesForFilter();
+        var sorter = FILTER_SORTERS[activityState.filter] || FILTER_SORTERS.recent;
         return [...baseEntries].sort(sorter);
     }
 
     // grabs places in view
     function getEntriesForPlace(entryOrKey) {
-        const key =
+        var key =
             typeof entryOrKey === 'string'
                 ? normalizeKey(entryOrKey)
                 : normalizeKey(entryOrKey?.placeKey ? entryOrKey.placeKey : entryOrKey?.place);
@@ -427,7 +458,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
 
     // rebuilds left panel UI for what data we got
     function renderList() {
-        const entries = getSortedEntries();
+        var entries = getSortedEntries();
         activityListEl.innerHTML = '';
 
         if (!entries.length) {
@@ -447,42 +478,42 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         }
 
         entries.forEach((entry) => {
-            const listItem = document.createElement('li');
+            var listItem = document.createElement('li');
             listItem.className = 'ActivityCard';
             listItem.dataset.entryId = entry.id;
 
-            const button = document.createElement('button');
+            var button = document.createElement('button');
             button.type = 'button';
             button.className = 'ActivityCard__button';
 
-            const flip = document.createElement('div');
+            var flip = document.createElement('div');
             flip.className = 'ActivityCard__flip';
 
-            const front = document.createElement('div');
+            var front = document.createElement('div');
             front.className = 'ActivityCard__face ActivityCard__face--front';
 
-            const placeEl = document.createElement('span');
+            var placeEl = document.createElement('span');
             placeEl.className = 'ActivityCard__place';
             placeEl.textContent = entry.place;
 
-            const metaEl = document.createElement('div');
+            var metaEl = document.createElement('div');
             metaEl.className = 'ActivityCard__meta';
 
-            const personEl = document.createElement('span');
+            var personEl = document.createElement('span');
             personEl.className = 'ActivityCard__person';
 
-            const nameEl = document.createElement('span');
+            var nameEl = document.createElement('span');
             nameEl.textContent = entry.name;
 
-            const ratingEl = document.createElement('span');
+            var ratingEl = document.createElement('span');
             ratingEl.className = 'ActivityCard__rating';
             ratingEl.textContent = formatRating(entry.rating);
 
             personEl.append(nameEl, ratingEl);
 
-            const dateEl = document.createElement('time');
+            var dateEl = document.createElement('time');
             dateEl.className = 'ActivityCard__date';
-            const formattedDate = formatDate(entry.createdAt);
+            var formattedDate = formatDate(entry.createdAt);
             dateEl.textContent = formattedDate || 'Just now';
             if (entry.createdAt) {
                 dateEl.dateTime = new Date(entry.createdAt).toISOString();
@@ -490,27 +521,27 @@ if (typeof window.appMap.showAllEntries !== 'function') {
 
             metaEl.append(personEl, dateEl);
 
-            const vibeChip = document.createElement('span');
+            var vibeChip = document.createElement('span');
             vibeChip.className = 'ActivityCard__vibe';
             vibeChip.textContent = entry.vibe;
 
             front.append(placeEl, metaEl, vibeChip);
 
-            const back = document.createElement('div');
+            var back = document.createElement('div');
             back.className = 'ActivityCard__face ActivityCard__face--back';
 
-            const backLabel = document.createElement('span');
+            var backLabel = document.createElement('span');
             backLabel.className = 'ActivityCard__backLabel';
             backLabel.textContent = 'Latest thought';
 
-            const backComment = document.createElement('p');
+            var backComment = document.createElement('p');
             backComment.className = 'ActivityCard__comment';
             backComment.textContent = truncate(entry.comments || 'No comments added yet.', 120);
 
-            const backRating = document.createElement('div');
+            var backRating = document.createElement('div');
             backRating.className = 'ActivityCard__backRating';
             backRating.textContent = formatRating(entry.rating);
-            const backRatingSuffix = document.createElement('span');
+            var backRatingSuffix = document.createElement('span');
             backRatingSuffix.textContent = '/5';
             backRating.appendChild(backRatingSuffix);
 
@@ -538,42 +569,42 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         summaryRecent.innerHTML = '';
 
         if (!entriesForPlace.length) {
-            const emptyItem = document.createElement('li');
+            var emptyItem = document.createElement('li');
             emptyItem.className = 'ActivitySummary__recentEmpty';
             emptyItem.textContent = 'No sessions logged yet.';
             summaryRecent.appendChild(emptyItem);
             return;
         }
 
-        const recent = [...entriesForPlace]
+        var recent = [...entriesForPlace]
             .sort((a, b) => b.createdAt - a.createdAt)
             .slice(0, 3);
         recent.forEach((item) => {
-            const li = document.createElement('li');
+            var li = document.createElement('li');
             li.className = 'ActivitySummary__recentItem';
 
-            const topRow = document.createElement('div');
+            var topRow = document.createElement('div');
             topRow.className = 'ActivitySummary__recentTop';
-            const nameSpan = document.createElement('span');
+            var nameSpan = document.createElement('span');
             nameSpan.textContent = item.name;
-            const ratingSpan = document.createElement('span');
+            var ratingSpan = document.createElement('span');
             ratingSpan.className = 'ActivitySummary__recentRating';
             ratingSpan.textContent = `★ ${formatRating(item.rating)}`;
             topRow.append(nameSpan, ratingSpan);
 
-            const dateEl = document.createElement('time');
+            var dateEl = document.createElement('time');
             dateEl.className = 'ActivitySummary__recentDate';
-            const recentDate = formatDate(item.createdAt);
+            var recentDate = formatDate(item.createdAt);
             dateEl.textContent = recentDate || 'Just now';
             if (item.createdAt) {
                 dateEl.dateTime = new Date(item.createdAt).toISOString();
             }
 
-            const meta = document.createElement('div');
+            var meta = document.createElement('div');
             meta.className = 'ActivitySummary__recentMeta';
             meta.textContent = item.vibe || 'Vibe TBD';
 
-            const comment = document.createElement('p');
+            var comment = document.createElement('p');
             comment.className = 'ActivitySummary__recentComment';
             comment.textContent = item.comments ? truncate(item.comments, 140) : 'No comments yet.';
 
@@ -592,45 +623,45 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         summaryChart.innerHTML = '';
 
         if (!entriesForPlace.length) {
-            const emptyMessage = document.createElement('p');
+            var emptyMessage = document.createElement('p');
             emptyMessage.className = 'ActivitySummary__chartEmpty';
             emptyMessage.textContent = 'Add another entry to unlock the vibe breakdown.';
             summaryChart.appendChild(emptyMessage);
             return;
         }
         // count how many times each vibe shows up
-        const counts = new Map();
+        var counts = new Map();
         entriesForPlace.forEach((entry) => {
-            const key = entry.vibe || 'Vibe TBD';
+            var key = entry.vibe || 'Vibe TBD';
             counts.set(key, (counts.get(key) || 0) + 1);
         });
-        const total = entriesForPlace.length || 1;
+        var total = entriesForPlace.length || 1;
 
-        const vibesToRender = [
+        var vibesToRender = [
             // start with our vibe order, and then add extra vibes added
-                // to look at removing later after switching to dropdown list (instead of type in)
+            // to look at removing later after switching to dropdown list (instead of type in)
             ...VIBE_ORDER,
             ...Array.from(counts.keys()).filter((key) => !VIBE_ORDER.includes(key)),
         ];
 
         vibesToRender.forEach((vibe) => {
-            const value = counts.get(vibe) || 0;
+            var value = counts.get(vibe) || 0;
             if (value === 0) {
                 return;
             }
-            const percentage = Math.round((value / total) * 100);
+            var percentage = Math.round((value / total) * 100);
 
-            const row = document.createElement('div');
+            var row = document.createElement('div');
             row.className = 'ActivitySummary__chartRow';
 
-            const label = document.createElement('span');
+            var label = document.createElement('span');
             label.className = 'ActivitySummary__chartLabel';
             label.textContent = vibe;
 
-            const bar = document.createElement('div');
+            var bar = document.createElement('div');
             bar.className = 'ActivitySummary__chartBar';
 
-            const fill = document.createElement('div');
+            var fill = document.createElement('div');
             fill.className = 'ActivitySummary__chartFill';
             fill.style.width = `${percentage}%`;
             fill.style.background = VIBE_COLORS[vibe] || '#10C1FF';
@@ -641,7 +672,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         });
 
         if (!summaryChart.children.length) {
-            const emptyMessage = document.createElement('p');
+            var emptyMessage = document.createElement('p');
             emptyMessage.className = 'ActivitySummary__chartEmpty';
             emptyMessage.textContent = 'No vibe data yet.';
             summaryChart.appendChild(emptyMessage);
@@ -665,10 +696,10 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         summaryTitle.textContent = entry.place;
         summaryLocation.textContent = entry.locationDisplay || 'Location TBD';
 
-        const related = getEntriesForPlace(entry);
-            // get avg. rating for spot
-        const ratingTotal = related.reduce((sum, item) => sum + (Number(item.rating) || 0), 0);
-        const average = related.length ? ratingTotal / related.length : entry.rating || 0;
+        let related = getEntriesForPlace(entry);
+        // get avg. rating for spot
+        let ratingTotal = related.reduce((sum, item) => sum + (Number(item.rating) || 0), 0);
+        let average = related.length ? ratingTotal / related.length : entry.rating || 0;
 
         summaryRating.textContent = `${formatRating(average)}/5`;
         summaryCount.textContent = related.length.toString();
@@ -687,7 +718,8 @@ if (typeof window.appMap.showAllEntries !== 'function') {
 
     // selectEntry is our shared handler for picking a card, whether from list or map.
     function selectEntry(entryId, options = {}) {
-        const entry = activityState.entries.find((item) => item.id === entryId);
+        debugger;
+        var entry = activityState.entries.find((item) => item.id === entryId);
         if (!entry) {
             return;
         }
@@ -710,7 +742,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
     // highlights whatever filter we have selected
     function syncFilterButtons() {
         filterButtons.forEach((button) => {
-            const isActive = button.dataset.filter === activityState.filter;
+            var isActive = button.dataset.filter === activityState.filter;
             button.classList.toggle('is-active', isActive);
             button.setAttribute('aria-selected', isActive ? 'true' : 'false');
         });
@@ -725,13 +757,13 @@ if (typeof window.appMap.showAllEntries !== 'function') {
             activityState.selectedId = entries[0].id;
             return;
         }
-        const hasSelected = entries.some((entry) => entry.id === activityState.selectedId);
+        var hasSelected = entries.some((entry) => entry.id === activityState.selectedId);
         if (hasSelected) {
             return;
         }
-        const activeEntry = activityState.entries.find((item) => item.id === activityState.selectedId);
+        var activeEntry = activityState.entries.find((item) => item.id === activityState.selectedId);
         if (activeEntry) {
-            const replacement = entries.find((entry) => entry.placeKey === activeEntry.placeKey);
+            var replacement = entries.find((entry) => entry.placeKey === activeEntry.placeKey);
             if (replacement) {
                 activityState.selectedId = replacement.id;
                 return;
@@ -745,17 +777,17 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         if (!nextFilter || nextFilter === activityState.filter) {
             return;
         }
-        const shouldFocusMap = options.focusMap !== false;
+        let shouldFocusMap = options.focusMap !== false;
         activityState.filter = nextFilter;
         syncFilterButtons();
-            // get entry before sorting
-        const sorted = getSortedEntries();
+        // get entry before sorting
+        let sorted = getSortedEntries();
         syncSelectedIdForFilter(sorted);
 
-            // rebuild the left-hand
+        // rebuild the left-hand
         renderList();
         if (activityState.selectedId) {
-            const selectedEntry = activityState.entries.find((item) => item.id === activityState.selectedId);
+            let selectedEntry = activityState.entries.find((item) => item.id === activityState.selectedId);
             renderSummary(selectedEntry || null);
             if (shouldFocusMap && selectedEntry) {
                 focusMapOnEntry(selectedEntry);
@@ -782,77 +814,63 @@ if (typeof window.appMap.showAllEntries !== 'function') {
 
     // hide's modal if open
     function closeModalIfOpen() {
+        debugger;
         if (!modal || modal.hidden === true) {
             return;
         }
-        modal.hidden = true;
-        modal.setAttribute('aria-hidden', 'true');
-        body.classList.remove('modal-open');
+        closeModal();
     }
+
 
     function handleFormSubmit(event) {
         if (event.defaultPrevented) {
             return;
         }
         event.preventDefault();
-        const nextEntry = buildEntryFromForm();
-        if (!nextEntry) {
-            return;
-        }
-        activityState.entries.push(nextEntry);
+
+        var nextEntry = buildEntryFromForm();
+        var payload = {
+            ent_userid: nextEntry.name,
+            ent_details: nextEntry.comments,
+            ent_location: nextEntry.locationDisplay,
+            ent_rating: nextEntry.rating,
+            ent_vibe: nextEntry.vibe
+        };
+
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", "/addEntry", false);
+        xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
+        xhr.send(JSON.stringify(payload));
+        let npk = JSON.parse(xhr.response).pk;
+        debugger;
+
+        //activityState.entries.push(nextEntry);
+        seedEntries();
         syncMapEntries();
-        selectEntry(nextEntry.id, { incrementVisit: false });
+        selectEntry(npk, { incrementVisit: false });
         form.reset();
         clearLocationDatasets();
         closeModalIfOpen();
     }
 
-    // FOR TESTING AND DEV
     function seedEntries() {
-        const now = Date.now();
-        const presets = [
-            {
-                id: 'seed-methodical',
-                place: 'Methodical Downtown',
-                name: 'Sam T.',
-                vibe: 'Lock In (Deep Focus)',
-                comments: 'Good Coffee! Love being in downtown. Upstairs can be packed if you do not get there at the right time',
-                locationDisplay: 'Methodical Coffee, 101 North Main Street, Downtown, Greenville, Greenville County, South Carolina, 29601, United States',
-                locationQuery: '101 North Main Street, Greenville, Greenville County, South Carolina, 29601',
-                rating: 4,
-                createdAt: now - 1000 * 60 * 60 * 4,
-                visits: 5,
-            },
-            {
-                id: 'seed-commons',
-                place: 'The Commons Riverwalk',
-                name: 'Jack T.',
-                vibe: 'Social Brainstorm Jam',
-                comments: 'chill vibe grabbing a beer and sitting outside',
-                locationDisplay: 'The Commons, 147 Welborn Street, Greenville, South Carolina 29601, United States',
-                locationQuery: 'The Commons, Greenville, South Carolina',
-                rating: 3,
-                createdAt: now - 1000 * 60 * 60 * 26,
-                visits: 8,
-            },
-            {
-                id: 'seed-grateful',
-                place: 'Grateful Brew',
-                name: 'Jack T.',
-                vibe: 'Creative Coding Environment',
-                comments: 'fun to get a coffee and beer at!',
-                locationDisplay: 'Grateful Brew, 501 South Pleasantburg Drive, Cavalier Heights, Greenville, Greenville County, South Carolina, 29607, United States',
-                locationQuery: 'Grateful Brew, Greenville, South Carolina',
-                rating: 4,
-                createdAt: now - 1000 * 60 * 60 * 72,
-                visits: 6,
-            },
-        ];
-
-        presets.forEach((entry) => {
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", "/getEntries", false);
+        xhr.send(null);
+        var data = JSON.parse(xhr.responseText) || [];;
+        activityState.entries = [];
+        data.forEach(function (db) {
             activityState.entries.push({
-                ...entry,
-                placeKey: normalizeKey(entry.place),
+                id: db.ent_pk,
+                place: db.ent_location,
+                placeKey: normalizeKey(db.ent_location),
+                name: db.ent_userid,
+                vibe: db.ent_vibe,
+                comments: db.ent_details,
+                locationDisplay: db.ent_location,
+                rating: db.ent_rating,
+                createdAt: db.ent_date * 1000,
+                visits: 1
             });
         });
     }
@@ -863,7 +881,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
     syncMapEntries();
 
     if (activityState.entries.length) {
-        const initial = getSortedEntries();
+        var initial = getSortedEntries();
         if (initial.length) {
             selectEntry(initial[0].id, { incrementVisit: false, focusMap: false });
         }
@@ -878,11 +896,13 @@ if (typeof window.appMap.showAllEntries !== 'function') {
     }
 
     function handleMapEntrySelection(event) {
-        const entryId = event?.detail?.entryId;
+        debugger;
+        //jack add a button here that says "add visit" for when someone visits an existing location?
+        var entryId = event?.detail?.entryId;
         if (!entryId) {
             return;
         }
-        const entryExists = activityState.entries.some((item) => item.id === entryId);
+        var entryExists = activityState.entries.some((item) => item.id === entryId);
         if (!entryExists) {
             return;
         }
@@ -894,16 +914,16 @@ if (typeof window.appMap.showAllEntries !== 'function') {
 
 // Map + search logic
 (function () {
-    const mapBridge = window.appMap || (window.appMap = {});
-    const activityFocusQueue = window.__activityFocusQueue || [];
-    const mapActionQueue = window.__mapActionQueue || [];
+    var mapBridge = window.appMap || (window.appMap = {});
+    var activityFocusQueue = window.__activityFocusQueue || [];
+    var mapActionQueue = window.__mapActionQueue || [];
 
     function flushQueuedMapCommands() {
         if (!mapActionQueue.length) {
             return;
         }
         while (mapActionQueue.length) {
-            const action = mapActionQueue.shift();
+            var action = mapActionQueue.shift();
             if (action && typeof mapBridge[action.method] === 'function') {
                 mapBridge[action.method](...(action.args || []));
             }
@@ -912,49 +932,36 @@ if (typeof window.appMap.showAllEntries !== 'function') {
 
     if (typeof L === 'undefined') {
         console.warn('Leaflet failed to load; map cannot be initialised.');
-        mapBridge.focusOnEntry = () => {};
-        mapBridge.setCapturedEntries = () => {};
-        mapBridge.showAllEntries = () => {};
+        mapBridge.focusOnEntry = () => { };
+        mapBridge.setCapturedEntries = () => { };
+        mapBridge.showAllEntries = () => { };
         flushQueuedMapCommands();
         return;
     }
 
     // initializeMap boots Leaflet, wires up helpers, and starts loading tiles.
     function initializeMap() {
-        const mapContainer = document.getElementById('map');
+        currentMarker = null;
+        mapContainer = document.getElementById('map');
         if (!mapContainer) {
-            mapBridge.focusOnEntry = () => {};
-            mapBridge.setCapturedEntries = () => {};
-            mapBridge.showAllEntries = () => {};
+            mapBridge.focusOnEntry = () => { };
+            mapBridge.setCapturedEntries = () => { };
+            mapBridge.showAllEntries = () => { };
             flushQueuedMapCommands();
             return;
         }
 
-        const statusEl = document.getElementById('status');
-        const GREENVILLE_CENTER = [34.8526, -82.3940];
-        const DEFAULT_PLACE = {
-            display_name: 'Greenville, SC',
-            lat: String(GREENVILLE_CENTER[0]),
-            lon: String(GREENVILLE_CENTER[1]),
-        };
-        const NOMINATIM_BASE_URL = 'https://nominatim.openstreetmap.org/search';
-        const NOMINATIM_VIEWBOX = '-82.6,35.1,-82.1,34.6';
-        const HTML_ESCAPE_LOOKUP = {
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#39;',
-        };
+        statusEl = document.getElementById('status');
+
 
         async function fetchPlaces(query, options = {}) {
-            const {
+            let {
                 limit = 5,
                 minLength = 3,
                 enforceMinLength = true,
             } = options;
 
-            const trimmed = (query ?? '').trim();
+            let trimmed = (query ?? '').trim();
             if (!trimmed) {
                 return [];
             }
@@ -963,7 +970,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
                 return [];
             }
 
-            const params = new URLSearchParams({
+            let params = new URLSearchParams({
                 format: 'json',
                 limit: String(limit),
                 bounded: '1',
@@ -971,63 +978,80 @@ if (typeof window.appMap.showAllEntries !== 'function') {
                 q: trimmed,
             });
 
-            const response = await fetch(`${NOMINATIM_BASE_URL}?${params.toString()}`);
+            let response = await fetch(`${NOMINATIM_BASE_URL}?${params.toString()}`);
             if (!response.ok) {
                 throw new Error('Suggestion request failed');
             }
 
-            const results = await response.json();
+            let results = await response.json();
             return Array.isArray(results) ? results : [];
         }
 
         function escapeHtml(value) {
-            const raw = value == null ? '' : String(value);
+            let raw = value == null ? '' : String(value);
             return raw.replace(/[&<>"']/g, (char) => HTML_ESCAPE_LOOKUP[char]);
         }
 
         function parseDisplayName(value) {
-            const displayName =
+            let displayName =
                 typeof value === 'string'
                     ? value
                     : value && typeof value.display_name === 'string'
                         ? value.display_name
                         : '';
-            const trimmed = displayName.trim();
+            let trimmed = displayName.trim();
             if (!trimmed) {
                 return { displayName: '', name: '', address: '' };
             }
 
-            const parts = trimmed.split(',');
-            const firstPart = parts.shift() || '';
-            const name = firstPart.trim() || trimmed;
-            const address = parts.join(',').trim();
+            let parts = trimmed.split(',');
+            let firstPart = parts.shift() || '';
+            let name = firstPart.trim() || trimmed;
+            let address = parts.join(',').trim();
 
             return { displayName: trimmed, name, address };
         }
 
-        function buildNameAddressHtml(value, variantClass) {
-            const { displayName, name, address } = parseDisplayName(value);
+        function buildNameAddressHtml(value, variantClass, withAddBtn = false) {
+            let { displayName, name, address } = parseDisplayName(value);
             if (!displayName) {
                 return '';
             }
 
-            const classes = ['PopupContent'];
+            var classes = ['PopupContent'];
             if (variantClass) {
                 classes.push(variantClass);
             }
 
-            const nameHtml = escapeHtml(name);
+            var nameHtml = escapeHtml(name);
 
             if (!address) {
-                return `<div class="${classes.join(' ')}"><div class="PopupContent__name">${nameHtml}</div></div>`;
-            }
+                if (withAddBtn) {
+                    let btnHtml = "<button onclick=\"openModal();\" style=\"margin-top:8px; padding:4px 10px; cursor:pointer;\">Add</button>";
+                    return `<div class="${classes.join(' ')}"><div class="PopupContent__name">${nameHtml}</div>${btnHtml}</div>`;
+                } else {
+                    return `<div class="${classes.join(' ')}"><div class="PopupContent__name">${nameHtml}</div></div>`;
+                }
 
-            const addressHtml = escapeHtml(address);
-            return `<div class="${classes.join(' ')}"><div class="PopupContent__name">${nameHtml}</div><div class="PopupContent__address">${addressHtml}</div></div>`;
+            }
+            let addressHtml = escapeHtml(address);
+
+            if (withAddBtn) {
+                debugger;
+                let usrn = getName();
+                //apostophes cause an error.... jack can fix?
+                let btnHtml = `<button onclick="currentMarker._popup.close();openModal({name: '${usrn}', location: '${nameHtml}'});" style="margin-top:8px; padding:4px 10px; cursor:pointer;">Add</button>`;
+                return `<div class="${classes.join(' ')}"><div class="PopupContent__name">${nameHtml}</div><div class="PopupContent__address">${addressHtml}</div>${btnHtml}</div>`;
+
+            } else {
+                return `<div class="${classes.join(' ')}"><div class="PopupContent__name">${nameHtml}</div><div class="PopupContent__address">${addressHtml}</div></div>`;
+            }
         }
 
-        function buildPopupContent(place) {
-            const html = buildNameAddressHtml(place, 'PopupContent--popup');
+
+
+        function buildPopupContent(place, addable = false) {
+            let html = buildNameAddressHtml(place, 'PopupContent--popup', addable);
             if (html) {
                 return html;
             }
@@ -1036,41 +1060,52 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         }
 
         function buildSuggestionMarkup(place) {
-            const html = buildNameAddressHtml(place, 'PopupContent--suggestion');
+            let html = buildNameAddressHtml(place, 'PopupContent--suggestion', false);
             if (html) {
                 return html;
             }
 
-            const parsed = parseDisplayName(place);
-            const fallbackName = escapeHtml(parsed.name || parsed.displayName || 'Selected location');
+            let parsed = parseDisplayName(place);
+            let fallbackName = escapeHtml(parsed.name || parsed.displayName || 'Selected location');
             return `<div class="PopupContent PopupContent--suggestion"><div class="PopupContent__name">${fallbackName}</div></div>`;
         }
 
         function buildPreviewMarkup(value) {
-            return buildNameAddressHtml(value, 'PopupContent--preview');
+            return buildNameAddressHtml(value, 'PopupContent--preview', false);
         }
 
-        const map = L.map(mapContainer);
+        var map = L.map(mapContainer);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution:
                 '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         }).addTo(map);
 
-        let mapReady = false;
-        const coordinateCache = new Map();
-        const pendingCoordinateLookups = new Map();
-        let currentMarker = null;
-        let activityMarker = null;
-        const entryPinsLayer = L.layerGroup().addTo(map);
-        const userLocationLayer = L.layerGroup().addTo(map);
-        let userLocationMarker = null;
-        let userLocationCircle = null;
-        let capturedEntries = [];
-        let pendingPinsRefresh = false;
-        let pinsRenderPromise = null;
-        let pinsBounds = null;
-        let pendingShowAll = false;
+
+
+
+        //stx dbg test
+        // debugger;
+        // map.on('click', function (e) {
+        //     currentMarker = L.marker([e.latlng.lat, e.latlng.lng]).addTo(map);
+        //     currentMarker.bindPopup(buildPopupContent(place, true)).openPopup();
+        // });
+
+
+        var mapReady = false;
+        var coordinateCache = new Map();
+        var pendingCoordinateLookups = new Map();
+
+        var activityMarker = null;
+        var entryPinsLayer = L.layerGroup().addTo(map);
+        var userLocationLayer = L.layerGroup().addTo(map);
+        var userLocationMarker = null;
+        var userLocationCircle = null;
+        var capturedEntries = [];
+        var pendingPinsRefresh = false;
+        var pinsRenderPromise = null;
+        var pinsBounds = null;
+        var pendingShowAll = false;
 
         map.setView(GREENVILLE_CENTER, 13);
         map.whenReady(() => {
@@ -1088,6 +1123,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
             }
             requestUserLocation();
         });
+
 
         if (statusEl) {
             statusEl.textContent = 'Centered on ' + DEFAULT_PLACE.display_name;
@@ -1114,8 +1150,8 @@ if (typeof window.appMap.showAllEntries !== 'function') {
             if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
                 return;
             }
-            const point = [lat, lon];
-            const icon = L.divIcon({
+            var point = [lat, lon];
+            var icon = L.divIcon({
                 className: 'UserLocationIcon',
                 html: '<div class="UserLocationMarker"><span class="UserLocationMarker__label">Your current location</span><span class="UserLocationMarker__dot"></span></div>',
                 iconSize: [170, 80],
@@ -1158,7 +1194,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         }
 
         function focusAtCoordinates(lat, lon, label) {
-            const point = [lat, lon];
+            var point = [lat, lon];
             map.flyTo(point, 15, { duration: 0.8 });
             if (!activityMarker) {
                 activityMarker = L.marker(point, { riseOnHover: true }).addTo(map);
@@ -1166,7 +1202,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
                 activityMarker.setLatLng(point);
             }
 
-            const safeLabel = escapeHtml(label || 'Selected spot');
+            var safeLabel = escapeHtml(label || 'Selected spot');
             activityMarker.bindPopup(
                 `<div class="PopupContent PopupContent--popup"><div class="PopupContent__name">${safeLabel}</div></div>`
             );
@@ -1178,9 +1214,9 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         }
 
         function buildGeocodeQueries(entry) {
-            const queries = [];
-            const pushQuery = (value) => {
-                const trimmed = (value || '').toString().trim();
+            var queries = [];
+            var pushQuery = (value) => {
+                var trimmed = (value || '').toString().trim();
                 if (trimmed && !queries.includes(trimmed)) {
                     queries.push(trimmed);
                 }
@@ -1190,7 +1226,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
             pushQuery(entry?.locationDisplay);
             pushQuery(entry?.place);
 
-            const parsed = parseDisplayName(entry?.locationDisplay || entry?.place || '');
+            var parsed = parseDisplayName(entry?.locationDisplay || entry?.place || '');
             pushQuery(parsed.displayName);
             if (parsed.name && parsed.address) {
                 pushQuery(`${parsed.name}, ${parsed.address}`);
@@ -1210,26 +1246,26 @@ if (typeof window.appMap.showAllEntries !== 'function') {
                 return entry.coordinates;
             }
 
-            const queries = buildGeocodeQueries(entry);
-            for (const query of queries) {
-                const cacheKey = query.toLowerCase();
+            var queries = buildGeocodeQueries(entry);
+            for (var query of queries) {
+                var cacheKey = query.toLowerCase();
                 if (coordinateCache.has(cacheKey)) {
-                    const cached = coordinateCache.get(cacheKey);
+                    var cached = coordinateCache.get(cacheKey);
                     entry.coordinates = cached;
                     return cached;
                 }
                 if (pendingCoordinateLookups.has(cacheKey)) {
-                    const pending = pendingCoordinateLookups.get(cacheKey);
-                    const resolvedPending = await pending;
+                    var pending = pendingCoordinateLookups.get(cacheKey);
+                    var resolvedPending = await pending;
                     if (resolvedPending) {
                         entry.coordinates = resolvedPending;
                         return resolvedPending;
                     }
                     continue;
                 }
-                const lookupPromise = (async () => {
+                var lookupPromise = (async () => {
                     try {
-                        const [match] = await fetchPlaces(query, {
+                        var [match] = await fetchPlaces(query, {
                             limit: 1,
                             minLength: 1,
                             enforceMinLength: false,
@@ -1237,12 +1273,12 @@ if (typeof window.appMap.showAllEntries !== 'function') {
                         if (!match) {
                             return null;
                         }
-                        const lat = Number(match.lat);
-                        const lon = Number(match.lon);
+                        var lat = Number(match.lat);
+                        var lon = Number(match.lon);
                         if (Number.isNaN(lat) || Number.isNaN(lon)) {
                             return null;
                         }
-                        const coords = { lat, lon };
+                        var coords = { lat, lon };
                         coordinateCache.set(cacheKey, coords);
                         return coords;
                     } catch (err) {
@@ -1253,7 +1289,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
                     }
                 })();
                 pendingCoordinateLookups.set(cacheKey, lookupPromise);
-                const resolved = await lookupPromise;
+                var resolved = await lookupPromise;
                 if (resolved) {
                     entry.coordinates = resolved;
                     return resolved;
@@ -1271,7 +1307,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
                 return;
             }
 
-            const coords = await ensureEntryCoordinates(entry);
+            var coords = await ensureEntryCoordinates(entry);
             if (!coords) {
                 return;
             }
@@ -1283,7 +1319,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
                 return;
             }
             while (activityFocusQueue.length) {
-                const queued = activityFocusQueue.shift();
+                var queued = activityFocusQueue.shift();
                 resolveAndFocusEntry(queued);
             }
         }
@@ -1298,7 +1334,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
                 return;
             }
 
-            const entriesSnapshot = Array.isArray(capturedEntries) ? capturedEntries.slice() : [];
+            var entriesSnapshot = Array.isArray(capturedEntries) ? capturedEntries.slice() : [];
             if (!entriesSnapshot.length) {
                 entryPinsLayer.clearLayers();
                 pinsBounds = null;
@@ -1313,15 +1349,15 @@ if (typeof window.appMap.showAllEntries !== 'function') {
             pinsRenderPromise = (async () => {
                 entryPinsLayer.clearLayers();
                 pinsBounds = null;
-                const markers = [];
-                const coordsList = await Promise.all(entriesSnapshot.map((entry) => ensureEntryCoordinates(entry)));
+                var markers = [];
+                var coordsList = await Promise.all(entriesSnapshot.map((entry) => ensureEntryCoordinates(entry)));
                 coordsList.forEach((coords, index) => {
                     if (!coords) {
                         return;
                     }
-                    const entry = entriesSnapshot[index];
-                    const safeLabel = escapeHtml(entry.place || entry.locationDisplay || 'Captured spot');
-                    const marker = L.circleMarker([coords.lat, coords.lon], {
+                    var entry = entriesSnapshot[index];
+                    var safeLabel = escapeHtml(entry.place || entry.locationDisplay || 'Captured spot');
+                    var marker = L.circleMarker([coords.lat, coords.lon], {
                         radius: 7,
                         color: '#10C1FF',
                         weight: 2,
@@ -1416,10 +1452,10 @@ if (typeof window.appMap.showAllEntries !== 'function') {
 
         flushQueuedMapCommands();
 
-        const searchForm = document.querySelector('.TopBar_Search');
-        const inputEl = searchForm ? searchForm.querySelector('input[type="search"]') : null;
-        const suggestionsEl = document.getElementById('suggestions');
-        const searchFormattedEl = document.getElementById('search-formatted');
+        var searchForm = document.querySelector('.TopBar_Search');
+        var inputEl = searchForm ? searchForm.querySelector('input[type="search"]') : null;
+        var suggestionsEl = document.getElementById('suggestions');
+        var searchFormattedEl = document.getElementById('search-formatted');
 
         if (!searchForm || !inputEl || !suggestionsEl) {
             return;
@@ -1437,7 +1473,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
                 return;
             }
 
-            const fieldEl = searchFormattedEl.closest('.TopBar_SearchField');
+            var fieldEl = searchFormattedEl.closest('.TopBar_SearchField');
             if (!html) {
                 searchFormattedEl.innerHTML = '';
                 searchFormattedEl.hidden = true;
@@ -1450,7 +1486,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
             searchFormattedEl.innerHTML = html;
             searchFormattedEl.hidden = false;
 
-            const height = searchFormattedEl.offsetHeight;
+            var height = searchFormattedEl.offsetHeight;
             if (fieldEl) {
                 fieldEl.style.setProperty('--search-preview-height', `${height}px`);
             }
@@ -1458,7 +1494,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
 
         // rebuilds the preview based on the current input text
         function updateSearchPreview(value) {
-            const html = buildPreviewMarkup(value);
+            var html = buildPreviewMarkup(value);
             setSearchPreviewContent(html);
         }
 
@@ -1469,8 +1505,8 @@ if (typeof window.appMap.showAllEntries !== 'function') {
 
         // fills the search field with the nicely formatted place name
         function applyPlaceToInput(place) {
-            const parsed = parseDisplayName(place);
-            const value = parsed.name || parsed.displayName || '';
+            var parsed = parseDisplayName(place);
+            var value = parsed.name || parsed.displayName || '';
             if (inputEl) {
                 inputEl.value = value;
             }
@@ -1488,8 +1524,8 @@ if (typeof window.appMap.showAllEntries !== 'function') {
 
         // centers the map on a search result and drops a marker
         function goToPlace(place) {
-            const lat = parseFloat(place.lat);
-            const lon = parseFloat(place.lon);
+            var lat = parseFloat(place.lat);
+            var lon = parseFloat(place.lon);
 
             if (Number.isNaN(lat) || Number.isNaN(lon)) {
                 return;
@@ -1502,10 +1538,17 @@ if (typeof window.appMap.showAllEntries !== 'function') {
             }
 
             currentMarker = L.marker([lat, lon]).addTo(map);
-            currentMarker.bindPopup(buildPopupContent(place)).openPopup();
+            currentMarker.bindPopup(buildPopupContent(place, true)).openPopup();
+
+            //stx dbg test
+            currentMarker.on('click', function (e) {
+                let latlng = e.latlng;
+
+            });
+
 
             if (statusEl) {
-                const label = place && place.display_name ? place.display_name : 'Selected location';
+                var label = place && place.display_name ? place.display_name : 'Selected location';
                 statusEl.textContent = 'Showing: ' + label;
             }
 
@@ -1519,7 +1562,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
                 return;
             }
 
-            const submitButton = searchForm.querySelector('button[type="submit"]');
+            var submitButton = searchForm.querySelector('button[type="submit"]');
             if (submitButton) {
                 submitButton.disabled = true;
             }
@@ -1529,7 +1572,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
             updateSearchPreview(query);
 
             try {
-                const results = await fetchPlaces(query, {
+                var results = await fetchPlaces(query, {
                     limit: 1,
                     minLength: 1,
                     enforceMinLength: false,
@@ -1542,7 +1585,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
                     return;
                 }
 
-                const place = results[0];
+                var place = results[0];
                 goToPlace(place);
             } catch (err) {
                 console.error(err);
@@ -1564,7 +1607,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
             }
 
             try {
-                const results = await fetchPlaces(query, { limit: 5 });
+                var results = await fetchPlaces(query, { limit: 5 });
 
                 if (!results || results.length === 0) {
                     clearSuggestions();
@@ -1574,7 +1617,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
                 suggestionsEl.innerHTML = '';
                 suggestionsEl.scrollTop = 0;
                 results.forEach((place) => {
-                    const li = document.createElement('li');
+                    var li = document.createElement('li');
                     li.innerHTML = buildSuggestionMarkup(place);
                     li.tabIndex = 0;
                     li.setAttribute('role', 'option');
@@ -1600,9 +1643,9 @@ if (typeof window.appMap.showAllEntries !== 'function') {
         }
 
         function setupModalLocationAutocomplete() {
-            const modalLocationInput = document.querySelector('#new-entry-modal input[name="location"]');
-            const modalSuggestionsEl = document.getElementById('modal-location-suggestions');
-            const locationWrapper = document.querySelector('.LocationAutocomplete');
+            var modalLocationInput = document.querySelector('#new-entry-modal input[name="location"]');
+            var modalSuggestionsEl = document.getElementById('modal-location-suggestions');
+            var locationWrapper = document.querySelector('.LocationAutocomplete');
 
             if (!modalLocationInput || !modalSuggestionsEl || !locationWrapper) {
                 return;
@@ -1628,7 +1671,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
                 }
 
                 try {
-                    const results = await fetchPlaces(query, { limit: 5 });
+                    var results = await fetchPlaces(query, { limit: 5 });
 
                     if (!results || results.length === 0) {
                         clearModalSuggestions();
@@ -1637,12 +1680,12 @@ if (typeof window.appMap.showAllEntries !== 'function') {
 
                     modalSuggestionsEl.innerHTML = '';
                     results.forEach((place) => {
-                        const li = document.createElement('li');
+                        var li = document.createElement('li');
                         li.innerHTML = buildSuggestionMarkup(place);
                         li.tabIndex = 0;
                         li.setAttribute('role', 'option');
                         li.addEventListener('click', () => {
-                            const { name } = parseDisplayName(place);
+                            var { name } = parseDisplayName(place);
                             modalLocationInput.value = name || place.display_name || '';
                             modalLocationInput.dataset.lat = place.lat;
                             modalLocationInput.dataset.lon = place.lon;
@@ -1673,7 +1716,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
                 delete modalLocationInput.dataset.displayName;
                 delete modalLocationInput.dataset.placeName;
 
-                const query = modalLocationInput.value.trim();
+                var query = modalLocationInput.value.trim();
 
                 if (modalSuggestTimeout) {
                     clearTimeout(modalSuggestTimeout);
@@ -1699,7 +1742,7 @@ if (typeof window.appMap.showAllEntries !== 'function') {
 
         inputEl.addEventListener('input', () => {
             updateSearchPreview(inputEl.value);
-            const query = inputEl.value.trim();
+            var query = inputEl.value.trim();
 
             if (suggestTimeout) {
                 clearTimeout(suggestTimeout);

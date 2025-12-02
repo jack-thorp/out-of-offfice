@@ -16,6 +16,17 @@ def execute(sql, params=()):
 
 
 
+@app.route("/hardReset")
+def hardReset():
+    conn = sqlite3.connect(DB)
+    cur = conn.cursor()
+    cur.execute("delete from r5entries;")
+
+    conn.commit()
+    conn.close()
+
+    return "deleted"
+
 @app.route("/addEntry", methods=["POST"])
 def addEntry():
     data = flask.request.get_json()
@@ -23,14 +34,15 @@ def addEntry():
     cur = conn.cursor()
 
     cur.execute("""
-        INSERT INTO r5entries(ent_userid, ent_details, ent_location, ent_rating, ent_vibe)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO r5entries(ent_userid, ent_details, ent_location, ent_rating, ent_vibe,ent_address,ent_lat,ent_long)
+        VALUES (?, ?, ?, ?, ?, ?)
     """, (
         data["ent_userid"],
         data["ent_details"],
         data["ent_location"],
         data["ent_rating"],
-        data["ent_vibe"]
+        data["ent_vibe"],
+        data["ent_address"], data["ent_lat"], data["ent_long"]
     ))
 
     pk = cur.lastrowid

@@ -2,7 +2,15 @@
 window.__activityFocusQueue = window.__activityFocusQueue || [];
 window.__mapActionQueue = window.__mapActionQueue || [];
 window.appMap = window.appMap || {};
-debugger;
+var map;
+
+function escapeJsString(str) {
+    return String(str)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '\\"');
+}
+
 // queueMapCommand holds map requests until the map script is ready to run them.
 function queueMapCommand(method, args) {
     window.__mapActionQueue.push({ method, args });
@@ -44,6 +52,7 @@ const HTML_ESCAPE_LOOKUP = {
 }
 
 var currentMarker = null;
+var activityMarker;
 var mapContainer = null;
 var statusEl = null;
 
@@ -67,7 +76,12 @@ function openModal(formDefs = false) {
     //fill in values automatically
     if (formDefs) {
         form.querySelector('input[name="name"]').value = formDefs.name;
-        form.querySelector('input[name="location"]').value = formDefs.location;
+        let loc = form.querySelector('input[name="location"]');
+        loc.value = formDefs.location;
+        loc.dataset.displayName = formDefs.address;
+        loc.dataset.placeName = formDefs.location;
+        loc.dataset.lat = formDefs.lat;
+        loc.dataset.lon = formDefs.lon;
     }
 }
 
@@ -393,15 +407,16 @@ window.addEventListener('keydown', (event) => {
         var locationValue = (formData.get('location') || '').toString().trim();
         var ratingValue = ratingInput ? Number(ratingInput.value) : 0;
         var datasetPlace = locationInput?.dataset.placeName || '';
-        var datasetDisplay = locationInput?.dataset.displayName || '';
+        var datasetAddress = locationInput?.dataset.displayName || '';
 
-        var place = (datasetPlace || locationValue || 'Untitled Spot').trim();
-        var locationDisplay = (datasetDisplay || locationValue || place || 'Location TBD').trim();
+        //place??
+        var placea = (datasetAddress || 'Untitled Spot').trim();
+        var locationDisplay = (locationValue || 'Location TBD').trim();
 
         return {
             id: `entry-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-            place,
-            placeKey: normalizeKey(place),
+            place: placea,
+            placeKey: normalizeKey(placea),
             name: nameValue,
             vibe: vibeValue,
             comments: commentsValue,
@@ -494,7 +509,7 @@ window.addEventListener('keydown', (event) => {
 
             var placeEl = document.createElement('span');
             placeEl.className = 'ActivityCard__place';
-            placeEl.textContent = entry.place;
+            placeEl.textContent = entry.locationDisplay;
 
             var metaEl = document.createElement('div');
             metaEl.className = 'ActivityCard__meta';
@@ -693,8 +708,8 @@ window.addEventListener('keydown', (event) => {
         summaryPlaceholder.hidden = true;
         summaryContent.hidden = false;
 
-        summaryTitle.textContent = entry.place;
-        summaryLocation.textContent = entry.locationDisplay || 'Location TBD';
+        summaryTitle.textContent = entry.locationDisplay;
+        summaryLocation.textContent = entry.place || 'Location TBD';
 
         let related = getEntriesForPlace(entry);
         // get avg. rating for spot
@@ -827,14 +842,17 @@ window.addEventListener('keydown', (event) => {
             return;
         }
         event.preventDefault();
-
+        debugger;
         var nextEntry = buildEntryFromForm();
         var payload = {
             ent_userid: nextEntry.name,
             ent_details: nextEntry.comments,
             ent_location: nextEntry.locationDisplay,
             ent_rating: nextEntry.rating,
-            ent_vibe: nextEntry.vibe
+            ent_vibe: nextEntry.vibe,
+            ent_address: nextEntry.place,
+            ent_lat: nextEntry.coordinates.lat,
+            ent_long: nextEntry.coordinates.lon
         };
 
         var xhr = new XMLHttpRequest();
@@ -842,6 +860,7 @@ window.addEventListener('keydown', (event) => {
         xhr.setRequestHeader("Content-Type", "application/json;charset=UTF-8");
         xhr.send(JSON.stringify(payload));
         let npk = JSON.parse(xhr.response).pk;
+
         debugger;
 
         //activityState.entries.push(nextEntry);
@@ -851,6 +870,7 @@ window.addEventListener('keydown', (event) => {
         form.reset();
         clearLocationDatasets();
         closeModalIfOpen();
+        map.removeLayer(currentMarker);
     }
 
     function seedEntries() {
@@ -862,8 +882,8 @@ window.addEventListener('keydown', (event) => {
         data.forEach(function (db) {
             activityState.entries.push({
                 id: db.ent_pk,
-                place: db.ent_location,
-                placeKey: normalizeKey(db.ent_location),
+                place: db.ent_address,
+                placeKey: normalizeKey(db.ent_address),
                 name: db.ent_userid,
                 vibe: db.ent_vibe,
                 comments: db.ent_details,
@@ -906,7 +926,7 @@ window.addEventListener('keydown', (event) => {
         if (!entryExists) {
             return;
         }
-        selectEntry(entryId, { incrementVisit: false, showSummary: true, focusMap: false });
+        selectEntry(entryId, { incrementVisit: false, showSummary: true, focusMap: true });
     }
 
     window.addEventListener('activity:select-entry', handleMapEntrySelection);
@@ -1012,41 +1032,85 @@ window.addEventListener('keydown', (event) => {
             return { displayName: trimmed, name, address };
         }
 
+
         function buildNameAddressHtml(value, variantClass, withAddBtn = false) {
             let { displayName, name, address } = parseDisplayName(value);
             if (!displayName) {
-                return '';
+                return withAddBtn ? null : '';
             }
 
-            var classes = ['PopupContent'];
+            const classes = ['PopupContent'];
             if (variantClass) {
                 classes.push(variantClass);
             }
 
-            var nameHtml = escapeHtml(name);
+            if (!withAddBtn) {
+                const nameHtml = escapeHtml(name);
+                const addressHtml = escapeHtml(address);
 
-            if (!address) {
-                if (withAddBtn) {
-                    let btnHtml = "<button onclick=\"openModal();\" style=\"margin-top:8px; padding:4px 10px; cursor:pointer;\">Add</button>";
-                    return `<div class="${classes.join(' ')}"><div class="PopupContent__name">${nameHtml}</div>${btnHtml}</div>`;
-                } else {
-                    return `<div class="${classes.join(' ')}"><div class="PopupContent__name">${nameHtml}</div></div>`;
+                if (!address) {
+                    return `<div class="${classes.join(' ')}">
+                        <div class="PopupContent__name">${nameHtml}</div>
+                    </div>`;
                 }
 
+                return `<div class="${classes.join(' ')}">
+                    <div class="PopupContent__name">${nameHtml}</div>
+                    <div class="PopupContent__address">${addressHtml}</div>
+                </div>`;
             }
-            let addressHtml = escapeHtml(address);
 
-            if (withAddBtn) {
-                debugger;
-                let usrn = getName();
-                //apostophes cause an error.... jack can fix?
-                let btnHtml = `<button onclick="currentMarker._popup.close();openModal({name: '${usrn}', location: '${nameHtml}'});" style="margin-top:8px; padding:4px 10px; cursor:pointer;">Add</button>`;
-                return `<div class="${classes.join(' ')}"><div class="PopupContent__name">${nameHtml}</div><div class="PopupContent__address">${addressHtml}</div>${btnHtml}</div>`;
+            const container = document.createElement('div');
+            container.className = classes.join(' ');
 
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'PopupContent__name';
+            nameDiv.textContent = name;
+            container.appendChild(nameDiv);
+
+            if (address) {
+                const addressDiv = document.createElement('div');
+                addressDiv.className = 'PopupContent__address';
+                addressDiv.textContent = address;
+                container.appendChild(addressDiv);
+            }
+
+            const btn = document.createElement('button');
+            btn.textContent = 'Add';
+            btn.style.marginTop = '8px';
+            btn.style.padding = '4px 10px';
+            btn.style.cursor = 'pointer';
+
+
+            if (!address) {
+
+                btn.addEventListener('click', function () {
+                    openModal();
+                });
             } else {
-                return `<div class="${classes.join(' ')}"><div class="PopupContent__name">${nameHtml}</div><div class="PopupContent__address">${addressHtml}</div></div>`;
+                btn.addEventListener('click', function () {
+                    const usrn = getName();
+                    const lat = value && value.lat;
+                    const lon = value && value.lon;
+
+                    if (currentMarker && currentMarker._popup) {
+                        currentMarker._popup.close();
+                    }
+
+                    openModal({
+                        lat: String(lat),
+                        lon: String(lon),
+                        name: usrn,
+                        location: name,
+                        address: displayName
+                    });
+                });
             }
+
+            container.appendChild(btn);
+            return container;
         }
+
 
 
 
@@ -1074,7 +1138,7 @@ window.addEventListener('keydown', (event) => {
             return buildNameAddressHtml(value, 'PopupContent--preview', false);
         }
 
-        var map = L.map(mapContainer);
+        map = L.map(mapContainer);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution:
@@ -1096,7 +1160,7 @@ window.addEventListener('keydown', (event) => {
         var coordinateCache = new Map();
         var pendingCoordinateLookups = new Map();
 
-        var activityMarker = null;
+        activityMarker = null;
         var entryPinsLayer = L.layerGroup().addTo(map);
         var userLocationLayer = L.layerGroup().addTo(map);
         var userLocationMarker = null;
@@ -1193,25 +1257,51 @@ window.addEventListener('keydown', (event) => {
             );
         }
 
-        function focusAtCoordinates(lat, lon, label) {
+        function focusAtCoordinates(lat, lon, label, address) {
             var point = [lat, lon];
             map.flyTo(point, 15, { duration: 0.8 });
+
             if (!activityMarker) {
                 activityMarker = L.marker(point, { riseOnHover: true }).addTo(map);
             } else {
                 activityMarker.setLatLng(point);
             }
 
-            var safeLabel = escapeHtml(label || 'Selected spot');
-            activityMarker.bindPopup(
-                `<div class="PopupContent PopupContent--popup"><div class="PopupContent__name">${safeLabel}</div></div>`
-            );
+
+            const safeLabel = escapeHtml(label || 'Selected spot');
+            const safeAddr = escapeHtml(address || '');
+
+            const container = document.createElement('div');
+            container.innerHTML = `<div class="PopupContent__name">${safeLabel}</div><div class="PopupContent__address">${safeAddr}</div>`;
+
+            const btn = document.createElement('button');
+            btn.textContent = "Add Visit";
+            btn.style.marginTop = "8px";
+            btn.style.padding = "4px 10px";
+            btn.style.cursor = "pointer";
+
+            btn.addEventListener('click', function () {
+                activityMarker._popup.close();
+                openModal({
+                    lat: lat,
+                    lon: lon,
+                    name: getName(),
+                    location: label,
+                    address: address
+                });
+            });
+
+            container.appendChild(btn);
+
+            activityMarker.bindPopup(container);
+
             activityMarker.openPopup();
 
             if (statusEl) {
                 statusEl.textContent = 'Showing: ' + (label || 'Selected spot');
             }
         }
+
 
         function buildGeocodeQueries(entry) {
             var queries = [];
@@ -1311,7 +1401,8 @@ window.addEventListener('keydown', (event) => {
             if (!coords) {
                 return;
             }
-            focusAtCoordinates(coords.lat, coords.lon, entry.place || entry.locationDisplay);
+            debugger;
+            focusAtCoordinates(coords.lat, coords.lon, entry.locationDisplay, entry.place);
         }
 
         function flushQueuedFocusRequests() {
@@ -1356,7 +1447,7 @@ window.addEventListener('keydown', (event) => {
                         return;
                     }
                     var entry = entriesSnapshot[index];
-                    var safeLabel = escapeHtml(entry.place || entry.locationDisplay || 'Captured spot');
+                    var safeLabel = escapeHtml(entry.locationDisplay || 'Captured spot');
                     var marker = L.circleMarker([coords.lat, coords.lon], {
                         radius: 7,
                         color: '#10C1FF',
@@ -1365,9 +1456,7 @@ window.addEventListener('keydown', (event) => {
                         fillOpacity: 1,
                         bubblingMouseEvents: false,
                     });
-                    marker.bindPopup(
-                        `<div class="PopupContent PopupContent--popup"><div class="PopupContent__name">${safeLabel}</div></div>`
-                    );
+
                     marker.on('click', () => {
                         window.dispatchEvent(
                             new CustomEvent('activity:select-entry', {

@@ -3,7 +3,7 @@
 
 ***Out of Office*** is a *Tech Wheelhouse* map and activity log for remote-work adventures!!
 
-<img src="cdn/demo%20picture.png" width="700" />
+<img src="static/cdn/demo%20picture.png" width="700" />
 
 ### About:
 Discover local spots to share with your TW colleages! Go there, rate it, and let the team know your thoughts ultimately turning remote work into an adventure!

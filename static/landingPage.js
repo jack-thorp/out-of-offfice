@@ -311,7 +311,7 @@ window.addEventListener('keydown', (event) => {
     }
 
     // truncate long strings so they don’t overflow the layout
-    function truncate(text, maxLength = 120) {
+    function truncate(text, maxLength = 1000) {
         if (!text) {
             return '';
         }
@@ -665,7 +665,7 @@ window.addEventListener('keydown', (event) => {
 
             var comment = document.createElement('p');
             comment.className = 'ActivitySummary__recentComment';
-            comment.textContent = item.comments ? truncate(item.comments, 140) : 'No comments yet.';
+            comment.textContent = item.comments ? truncate(item.comments, 1000) : 'No comments yet.';
 
             li.append(topRow, dateEl, meta, comment);
             summaryRecent.appendChild(li);
@@ -778,10 +778,6 @@ window.addEventListener('keydown', (event) => {
         var entry = activityState.entries.find((item) => item.id === entryId);
         if (!entry) {
             return;
-        }
-
-        if (options.incrementVisit !== false) {
-            entry.visits += 1;
         }
 
         activityState.selectedId = entryId;

@@ -59,6 +59,16 @@ const VIBES = {
     'High Energy (Noisy)': '#f72428ff'
 };
 
+//populat vibes into drop down 
+var select = document.querySelector('select[name="vibeCategory"]');
+Object.keys(VIBES).forEach(function (label) {
+    var opt = document.createElement("option");
+    opt.value = label;
+    opt.textContent = label;
+    select.appendChild(opt);
+});
+
+
 
 var currentMarker = null;
 var activityMarker;
@@ -79,15 +89,6 @@ function getName() {
 // opens the new entry modal
 function openModal(formDefs = false) {
 
-    //populat vibes into drop down
-    var select = document.querySelector('select[name="vibeCategory"]');
-
-    Object.keys(VIBES).forEach(function (label) {
-        var opt = document.createElement("option");
-        opt.value = label;
-        opt.textContent = label;
-        select.appendChild(opt);
-    });
 
 
     modal.hidden = false;
@@ -103,7 +104,7 @@ function openModal(formDefs = false) {
         loc.dataset.lat = formDefs.lat;
         loc.dataset.lon = formDefs.lon;
     }
-    form.querySelector('input[name="name"]').value = getName();
+    form.querySelector('input[name="name"]').placeholder = getName();
 }
 
 // closes new entry modal
@@ -930,7 +931,8 @@ window.addEventListener('keydown', (event) => {
                 locationDisplay: db.ent_location,
                 rating: db.ent_rating,
                 createdAt: db.ent_date * 1000,
-                visits: 1
+                visits: 1,
+                coordinates: { lat: db.ent_lat, lon: db.ent_long }
             });
         });
     }
@@ -1204,7 +1206,6 @@ window.addEventListener('keydown', (event) => {
         var entryPinsLayer = L.layerGroup().addTo(map);
         var userLocationLayer = L.layerGroup().addTo(map);
         var userLocationMarker = null;
-        var userLocationCircle = null;
         var capturedEntries = [];
         var pendingPinsRefresh = false;
         var pinsRenderPromise = null;
@@ -1265,17 +1266,6 @@ window.addEventListener('keydown', (event) => {
                 userLocationLayer.removeLayer(userLocationMarker);
             }
             userLocationMarker = L.marker(point, { icon, interactive: false }).addTo(userLocationLayer);
-            if (userLocationCircle) {
-                userLocationLayer.removeLayer(userLocationCircle);
-            }
-            userLocationCircle = L.circle(point, {
-                radius: 150,
-                color: '#ff3b30',
-                weight: 1,
-                fillColor: '#ff3b30',
-                fillOpacity: 0.08,
-                opacity: 0.6,
-            }).addTo(userLocationLayer);
         }
 
         function requestUserLocation() {

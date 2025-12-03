@@ -35,14 +35,16 @@ def addEntry():
 
     cur.execute("""
         INSERT INTO r5entries(ent_userid, ent_details, ent_location, ent_rating, ent_vibe,ent_address,ent_lat,ent_long)
-        VALUES (?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         data["ent_userid"],
         data["ent_details"],
         data["ent_location"],
         data["ent_rating"],
         data["ent_vibe"],
-        data["ent_address"], data["ent_lat"], data["ent_long"]
+        data["ent_address"], 
+        data["ent_lat"], 
+        data["ent_long"]
     ))
 
     pk = cur.lastrowid

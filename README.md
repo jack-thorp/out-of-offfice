@@ -1,20 +1,16 @@
 # Out of Office
-*version: 1.0.0*
+*version: 2.0.0*
+Authors: Jack Thorp & Sam Tubb
 
 ***Out of Office*** is a *Tech Wheelhouse* map and activity log for remote-work adventures!!
 
 <img src="static/cdn/demo%20picture.png" width="700" />
 
 ### About:
-Discover local spots to share with your TW colleages! Go there, rate it, and let the team know your thoughts ultimately turning remote work into an adventure!
+At the time this was developed, our company for the most part all worked remotely but lived here in Greenville, SC. So what Sam and I built was an application that'll incentivize going to locations throughout the city, working from there, and leave a rating to share with your colleagues! Ultimately, turning working remote into an adventure!
 
-### Features:
+### Features on Site:
 - interactive map with icons
 - rating form
 - activity log
-
-### Upcoming Enhancements:
-- badges
-- profile pics?
-- automate input form?
-- hook up to db
+- SQLite-backed database for storing rankings

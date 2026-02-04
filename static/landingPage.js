@@ -1115,10 +1115,7 @@ window.addEventListener('keydown', (event) => {
 
             var btn = document.createElement('button');
             btn.textContent = 'Add';
-            btn.style.marginTop = '8px';
-            btn.style.padding = '4px 10px';
-            btn.style.cursor = 'pointer';
-
+            btn.classList.add('TopBar_NewEntry');
 
             if (!address) {
 
@@ -1302,9 +1299,7 @@ window.addEventListener('keydown', (event) => {
 
             const btn = document.createElement('button');
             btn.textContent = "Add Visit";
-            btn.style.marginTop = "8px";
-            btn.style.padding = "4px 10px";
-            btn.style.cursor = "pointer";
+            btn.classList.add('TopBar_NewEntry');
 
             btn.addEventListener('click', function () {
                 activityMarker._popup.close();
